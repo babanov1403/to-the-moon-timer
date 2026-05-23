@@ -1,0 +1,32 @@
+import 'package:flutter/material.dart';
+
+import 'duration_picker_result.dart';
+import 'duration_picker_sheet.dart';
+
+/// Shows the duration picker and applies the selected result to callbacks.
+Future<void> showDurationPickerSheet({
+  required BuildContext context,
+  required int initialIndex,
+  required void Function(int minutes) onMinutes,
+  required VoidCallback onDebug,
+  required VoidCallback onReset,
+}) async {
+  final result = await showModalBottomSheet<DurationPickerResult>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.58),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+    ),
+    builder: (_) => DurationPickerSheet(initialIndex: initialIndex),
+  );
+
+  if (result == null) return;
+  if (result.isReset) {
+    onReset();
+  } else if (result.isDebug) {
+    onDebug();
+  } else {
+    onMinutes(result.minutes);
+  }
+}
