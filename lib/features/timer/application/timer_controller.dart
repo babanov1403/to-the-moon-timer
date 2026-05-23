@@ -14,6 +14,7 @@ class TimerController extends ChangeNotifier {
       : _state = TimerState(
           remainingSeconds: kDefaultMinutes * 60,
           selectedMinutes: kDefaultMinutes,
+          selectedBreakMinutes: kDefaultBreakMinutes,
           isDebugMode: false,
           status: TimerStatus.idle,
         );
@@ -55,6 +56,7 @@ class TimerController extends ChangeNotifier {
     _state = TimerState(
       remainingSeconds: _focusSeconds,
       selectedMinutes: _state.selectedMinutes,
+      selectedBreakMinutes: _state.selectedBreakMinutes,
       isDebugMode: _state.isDebugMode,
       status: TimerStatus.idle,
       completedSetCount: _state.completedSetCount,
@@ -62,18 +64,27 @@ class TimerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Called when the user picks a new duration from the wheel.
+  /// Called when the user picks new focus and break durations from the picker.
   ///
   /// This is also a manual reset path for the four progress squares.
-  void applyMinutes(int minutes) {
+  void applyDurations({required int focusMinutes, required int breakMinutes}) {
     _cancelTicker();
     _state = TimerState(
-      remainingSeconds: minutes * 60,
-      selectedMinutes: minutes,
+      remainingSeconds: focusMinutes * 60,
+      selectedMinutes: focusMinutes,
+      selectedBreakMinutes: breakMinutes,
       isDebugMode: false,
       status: TimerStatus.idle,
     );
     notifyListeners();
+  }
+
+  /// Called when the user picks a new focus duration from legacy callers.
+  void applyMinutes(int minutes) {
+    applyDurations(
+      focusMinutes: minutes,
+      breakMinutes: _state.selectedBreakMinutes,
+    );
   }
 
   /// Called when the user taps the debug "10 sec" chip.
@@ -84,6 +95,7 @@ class TimerController extends ChangeNotifier {
     _state = const TimerState(
       remainingSeconds: kDebugSeconds,
       selectedMinutes: 0,
+      selectedBreakMinutes: kDefaultBreakMinutes,
       isDebugMode: true,
       status: TimerStatus.idle,
     );
@@ -129,8 +141,9 @@ class TimerController extends ChangeNotifier {
 
   /// Transitions from a completed focus session into a break countdown.
   void _beginBreak() {
-    final int breakSeconds =
-        _state.isDebugMode ? kDebugBreakSeconds : kDefaultBreakMinutes * 60;
+    final int breakSeconds = _state.isDebugMode
+        ? kDebugBreakSeconds
+        : _state.selectedBreakMinutes * 60;
     _beginCountdown(breakSeconds, _tickBreak);
     _state = _state.copyWith(
       remainingSeconds: breakSeconds,

@@ -41,16 +41,20 @@ class _TimerScreenState extends State<TimerScreen> {
     if (_controller.state.isRunning) return;
 
     final state = _controller.state;
-    final int initialIndex = state.isDebugMode
+    final int initialFocusIndex = state.isDebugMode
         ? 0
         : kDurationMinutes
             .indexOf(state.selectedMinutes)
             .clamp(0, kDurationMinutes.length - 1);
+    final int initialBreakIndex = kBreakDurationMinutes
+        .indexOf(state.selectedBreakMinutes)
+        .clamp(0, kBreakDurationMinutes.length - 1);
 
     await showDurationPickerSheet(
       context: context,
-      initialIndex: initialIndex,
-      onMinutes: _controller.applyMinutes,
+      initialFocusIndex: initialFocusIndex,
+      initialBreakIndex: initialBreakIndex,
+      onDurations: _controller.applyDurations,
       onDebug: _controller.applyDebugSeconds,
       onReset: _controller.restartSet,
     );

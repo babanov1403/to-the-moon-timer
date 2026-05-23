@@ -8,25 +8,27 @@ class RetroDurationTile extends StatelessWidget {
     super.key,
     required this.minutes,
     required this.selected,
+    required this.selectedColor,
     required this.onTap,
   });
 
   final int minutes;
   final bool selected;
+  final Color selectedColor;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = selected ? kDurationPickerCyan : kDurationPickerMuted;
-    final textColor = selected ? kDurationPickerCyan : kDurationPickerTitle;
+    final borderColor = selected ? selectedColor : kDurationPickerMuted;
+    final textColor = selected ? selectedColor : kDurationPickerTitle;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
-        splashColor: kDurationPickerCyan.withValues(alpha: 0.16),
-        highlightColor: kDurationPickerCyan.withValues(alpha: 0.08),
+        splashColor: selectedColor.withValues(alpha: 0.16),
+        highlightColor: selectedColor.withValues(alpha: 0.08),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
@@ -45,7 +47,7 @@ class RetroDurationTile extends StatelessWidget {
   BoxDecoration _decoration(Color borderColor) {
     return BoxDecoration(
       color: selected
-          ? kDurationPickerCyan.withValues(alpha: 0.09)
+          ? selectedColor.withValues(alpha: 0.09)
           : kDurationPickerPanel,
       borderRadius: BorderRadius.circular(4),
       border: Border.all(color: borderColor, width: selected ? 2 : 1),
@@ -55,7 +57,7 @@ class RetroDurationTile extends StatelessWidget {
 
   BoxShadow _shadow() {
     return BoxShadow(
-      color: kDurationPickerCyan.withValues(alpha: 0.28),
+      color: selectedColor.withValues(alpha: 0.28),
       blurRadius: 14,
       spreadRadius: 1,
     );

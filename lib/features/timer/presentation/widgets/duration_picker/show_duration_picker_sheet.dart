@@ -6,8 +6,10 @@ import 'duration_picker_sheet.dart';
 /// Shows the duration picker and applies the selected result to callbacks.
 Future<void> showDurationPickerSheet({
   required BuildContext context,
-  required int initialIndex,
-  required void Function(int minutes) onMinutes,
+  required int initialFocusIndex,
+  required int initialBreakIndex,
+  required void Function({required int focusMinutes, required int breakMinutes})
+      onDurations,
   required VoidCallback onDebug,
   required VoidCallback onReset,
 }) async {
@@ -18,7 +20,10 @@ Future<void> showDurationPickerSheet({
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
     ),
-    builder: (_) => DurationPickerSheet(initialIndex: initialIndex),
+    builder: (_) => DurationPickerSheet(
+      initialFocusIndex: initialFocusIndex,
+      initialBreakIndex: initialBreakIndex,
+    ),
   );
 
   if (result == null) return;
@@ -27,6 +32,9 @@ Future<void> showDurationPickerSheet({
   } else if (result.isDebug) {
     onDebug();
   } else {
-    onMinutes(result.minutes);
+    onDurations(
+      focusMinutes: result.focusMinutes,
+      breakMinutes: result.breakMinutes,
+    );
   }
 }

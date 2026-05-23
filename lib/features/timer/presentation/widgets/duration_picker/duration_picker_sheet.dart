@@ -8,24 +8,36 @@ import 'duration_picker_result.dart';
 import 'duration_wheel.dart';
 import 'retro_divider.dart';
 
-/// Modal bottom sheet that lets the user pick a session duration.
+/// Modal bottom sheet that lets the user pick focus and break durations.
 class DurationPickerSheet extends StatefulWidget {
-  const DurationPickerSheet({super.key, required this.initialIndex});
+  const DurationPickerSheet({
+    super.key,
+    required this.initialFocusIndex,
+    required this.initialBreakIndex,
+  });
 
-  final int initialIndex;
+  final int initialFocusIndex;
+  final int initialBreakIndex;
 
   @override
   State<DurationPickerSheet> createState() => _DurationPickerSheetState();
 }
 
 class _DurationPickerSheetState extends State<DurationPickerSheet> {
-  late int _pickedIndex;
+  late int _pickedFocusIndex;
+  late int _pickedBreakIndex;
+  _DurationPickerPage _page = _DurationPickerPage.focus;
 
   @override
   void initState() {
     super.initState();
-    _pickedIndex = widget.initialIndex;
+    _pickedFocusIndex = _clampIndex(widget.initialFocusIndex, kDurationMinutes);
+    _pickedBreakIndex =
+        _clampIndex(widget.initialBreakIndex, kBreakDurationMinutes);
   }
+
+  int _clampIndex(int index, List<int> minutes) =>
+      index.clamp(0, minutes.length - 1);
 
   @override
   Widget build(BuildContext context) {
@@ -39,14 +51,43 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
               const DurationPickerResult.reset(),
             ),
             onDone: () => Navigator.of(context).pop(
-              DurationPickerResult.minutes(kDurationMinutes[_pickedIndex]),
+              DurationPickerResult.durations(
+                focusMinutes: kDurationMinutes[_pickedFocusIndex],
+                breakMinutes: kBreakDurationMinutes[_pickedBreakIndex],
+              ),
             ),
           ),
           const RetroDivider(),
+          _DurationPageSelector(
+            page: _page,
+            focusMinutes: kDurationMinutes[_pickedFocusIndex],
+            breakMinutes: kBreakDurationMinutes[_pickedBreakIndex],
+            onChanged: (page) => setState(() => _page = page),
+          ),
+          const RetroDivider(),
           Expanded(
-            child: DurationWheel(
-              initialIndex: widget.initialIndex,
-              onChanged: (i) => _pickedIndex = i,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: DurationWheel(
+                key: ValueKey(_page),
+                initialIndex: _page == _DurationPickerPage.focus
+                    ? _pickedFocusIndex
+                    : _pickedBreakIndex,
+                minutes: _page == _DurationPickerPage.focus
+                    ? kDurationMinutes
+                    : kBreakDurationMinutes,
+                selectedColor: _page == _DurationPickerPage.focus
+                    ? kDurationPickerCyan
+                    : kDurationPickerYellow,
+                onChanged: (i) {
+                  if (_page == _DurationPickerPage.focus) {
+                    _pickedFocusIndex = i;
+                  } else {
+                    _pickedBreakIndex = i;
+                  }
+                  setState(() {});
+                },
+              ),
             ),
           ),
           const RetroDivider(),
@@ -77,4 +118,119 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
       ],
     );
   }
+}
+
+enum _DurationPickerPage { focus, breakTime }
+
+class _DurationPageSelector extends StatelessWidget {
+  const _DurationPageSelector({
+    required this.page,
+    required this.focusMinutes,
+    required this.breakMinutes,
+    required this.onChanged,
+  });
+
+  final _DurationPickerPage page;
+  final int focusMinutes;
+  final int breakMinutes;
+  final ValueChanged<_DurationPickerPage> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: kDurationPickerSheetBg,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: _DurationPageButton(
+              label: 'FOCUS',
+              minutes: focusMinutes,
+              color: kDurationPickerCyan,
+              selected: page == _DurationPickerPage.focus,
+              onTap: () => onChanged(_DurationPickerPage.focus),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _DurationPageButton(
+              label: 'BREAK',
+              minutes: breakMinutes,
+              color: kDurationPickerYellow,
+              selected: page == _DurationPickerPage.breakTime,
+              onTap: () => onChanged(_DurationPickerPage.breakTime),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DurationPageButton extends StatelessWidget {
+  const _DurationPageButton({
+    required this.label,
+    required this.minutes,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int minutes;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        splashColor: color.withValues(alpha: 0.16),
+        highlightColor: color.withValues(alpha: 0.08),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color:
+                selected ? color.withValues(alpha: 0.1) : kDurationPickerPanel,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: selected ? color : kDurationPickerMuted,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: _labelStyle(selected ? color : kDurationPickerTitle)),
+              const SizedBox(height: 4),
+              Text(
+                '$minutes MIN',
+                style: _minutesStyle(selected ? color : kDurationPickerMuted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  TextStyle _labelStyle(Color textColor) => TextStyle(
+        color: textColor,
+        fontSize: 11,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 2.4,
+      );
+
+  TextStyle _minutesStyle(Color textColor) => TextStyle(
+        color: textColor.withValues(alpha: 0.85),
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.6,
+      );
 }

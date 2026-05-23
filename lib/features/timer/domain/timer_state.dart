@@ -5,6 +5,7 @@ class TimerState {
   const TimerState({
     required this.remainingSeconds,
     required this.selectedMinutes,
+    required this.selectedBreakMinutes,
     required this.isDebugMode,
     required this.status,
     this.completedFocusSessions = 0,
@@ -15,6 +16,9 @@ class TimerState {
 
   /// 0 when debug mode is active.
   final int selectedMinutes;
+
+  /// Selected break duration in minutes.
+  final int selectedBreakMinutes;
 
   final bool isDebugMode;
   final TimerStatus status;
@@ -43,6 +47,7 @@ class TimerState {
   TimerState copyWith({
     int? remainingSeconds,
     int? selectedMinutes,
+    int? selectedBreakMinutes,
     bool? isDebugMode,
     TimerStatus? status,
     int? completedFocusSessions,
@@ -51,6 +56,7 @@ class TimerState {
     return TimerState(
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
       selectedMinutes: selectedMinutes ?? this.selectedMinutes,
+      selectedBreakMinutes: selectedBreakMinutes ?? this.selectedBreakMinutes,
       isDebugMode: isDebugMode ?? this.isDebugMode,
       status: status ?? this.status,
       completedFocusSessions:

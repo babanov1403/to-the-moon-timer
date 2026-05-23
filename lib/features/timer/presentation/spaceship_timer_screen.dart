@@ -231,16 +231,23 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     if (_controller.state.isRunning) return;
     HapticFeedback.lightImpact();
     final s = _controller.state;
-    final idx = s.isDebugMode
+    final focusIdx = s.isDebugMode
         ? 0
         : kDurationMinutes
             .indexOf(s.selectedMinutes)
             .clamp(0, kDurationMinutes.length - 1);
+    final breakIdx = kBreakDurationMinutes
+        .indexOf(s.selectedBreakMinutes)
+        .clamp(0, kBreakDurationMinutes.length - 1);
     await showDurationPickerSheet(
       context: context,
-      initialIndex: idx,
-      onMinutes: (m) {
-        _controller.applyMinutes(m);
+      initialFocusIndex: focusIdx,
+      initialBreakIndex: breakIdx,
+      onDurations: ({required focusMinutes, required breakMinutes}) {
+        _controller.applyDurations(
+          focusMinutes: focusMinutes,
+          breakMinutes: breakMinutes,
+        );
         _reset();
       },
       onDebug: () {
