@@ -81,9 +81,8 @@ flutter build web
 Main dependencies are declared in [pubspec.yaml](pubspec.yaml):
 
 - Flutter SDK.
-- flutter_foreground_task for foreground timer communication.
 - shared_preferences for local statistics storage.
-- wakelock_plus for keeping the screen awake during focus sessions.
+- wakelock_plus for keeping the screen awake during active timer sessions.
 
 ## App flow
 

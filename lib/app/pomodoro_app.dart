@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import 'theme/themes/red_focus_theme.dart';
 import '../features/home/presentation/home_screen.dart';
@@ -14,7 +13,7 @@ class PomodoroApp extends StatelessWidget {
       title: 'To The Moon Timer',
       debugShowCheckedModeBanner: false,
       theme: buildRedFocusTheme(),
-      home: const WithForegroundTask(child: HomeScreen()),
+      home: const HomeScreen(),
     );
   }
 }

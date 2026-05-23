@@ -25,8 +25,9 @@ void drawStars(
     final bright = i % 5 == 0;
     final hot = i % 17 == 0;
     final cold = i % 13 == 0;
-    final alpha =
-        dimmed ? (bright ? 0.22 : 0.12) : (0.42 + twinkle * 0.34).clamp(0.12, 1.0);
+    final alpha = dimmed
+        ? (bright ? 0.22 : 0.12)
+        : (0.42 + twinkle * 0.34).clamp(0.12, 1.0);
     final color = hot
         ? SpacePalette.starHot
         : cold
@@ -54,14 +55,22 @@ void drawStars(
 }
 
 void _drawPixelComet(Canvas canvas, Size size, double phase, Offset drift) {
-  final p = Paint()..style = PaintingStyle.fill;
-  final orbit = phase * math.pi * 2;
-  final head = Offset(
-    _wrap(size.width * (0.12 + phase * 1.14) + drift.dx * 0.18, size.width),
-    _wrap(size.height * 0.18 + math.sin(orbit) * size.height * 0.08 + drift.dy * 0.08,
-        size.height),
-  );
   const px = SpacePalette.px;
+  const visibleCyclePortion = 0.62;
+  const headExitPadding = px * 14;
+  const tailExitPadding = px * 16;
+
+  final cycleT = phase % 1.0;
+  if (cycleT > visibleCyclePortion) return;
+
+  final p = Paint()..style = PaintingStyle.fill;
+  final travelT = Curves.easeInOutSine.transform(cycleT / visibleCyclePortion);
+  final orbit = travelT * math.pi * 2;
+  final head = Offset(
+    -tailExitPadding +
+        travelT * (size.width + headExitPadding + tailExitPadding),
+    size.height * 0.18 + math.sin(orbit) * size.height * 0.08 + drift.dy * 0.08,
+  );
   final colors = [
     SpacePalette.starBright.withValues(alpha: 0.95),
     SpacePalette.nebulaMagenta.withValues(alpha: 0.62),

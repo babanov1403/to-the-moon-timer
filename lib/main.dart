@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import 'app/pomodoro_app.dart';
 
@@ -9,6 +8,5 @@ export 'app/pomodoro_app.dart' show PomodoroApp;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  FlutterForegroundTask.initCommunicationPort();
   runApp(const PomodoroApp());
 }

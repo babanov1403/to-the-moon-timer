@@ -8,8 +8,9 @@ class RetroDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 2,
-      color: kDurationPickerBorder,
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 18),
+      color: kDurationPickerBorder.withValues(alpha: 0.42),
     );
   }
 }

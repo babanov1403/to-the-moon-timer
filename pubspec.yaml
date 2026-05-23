@@ -10,7 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_foreground_task: ^9.2.2
   shared_preferences: ^2.5.5
   wakelock_plus: ^1.6.1
 

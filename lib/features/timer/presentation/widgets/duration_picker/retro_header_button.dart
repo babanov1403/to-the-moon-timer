@@ -22,9 +22,9 @@ class RetroHeaderButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        splashColor: color.withValues(alpha: 0.16),
-        highlightColor: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(24),
+        splashColor: color.withValues(alpha: 0.10),
+        highlightColor: color.withValues(alpha: 0.05),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: _decoration(),
@@ -43,9 +43,15 @@ class RetroHeaderButton extends StatelessWidget {
 
   BoxDecoration _decoration() {
     return BoxDecoration(
-      color: kDurationPickerPanel,
-      borderRadius: BorderRadius.circular(4),
-      border: Border.all(color: color.withValues(alpha: 0.8), width: 1.5),
+      color: kDurationPickerPanel.withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: color.withValues(alpha: 0.42), width: 1.2),
+      boxShadow: [
+        BoxShadow(
+          color: color.withValues(alpha: 0.08),
+          blurRadius: 14,
+        ),
+      ],
     );
   }
 
