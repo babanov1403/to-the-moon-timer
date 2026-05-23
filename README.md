@@ -1,6 +1,6 @@
 # To The Moon Timer
 
-To The Moon Timer is a Flutter Pomodoro app with a retro space theme. The timer turns each focus session into a small spaceship journey: start a focus session, take off, fly through space, land on a new planet, then continue through the Pomodoro cycle.
+To The Moon Timer is a Flutter Pomodoro app with a retro space theme. The timer turns each focus session into a small spaceship journey: start a focus session, take off, fly through space, land on a new pixel-art planet, then continue through the Pomodoro cycle.
 
 ## Features
 
@@ -11,7 +11,7 @@ To The Moon Timer is a Flutter Pomodoro app with a retro space theme. The timer 
 - Set-completion celebration state.
 - Pause, resume, restart, and duration picker flows.
 - Local focus-time statistics using shared preferences.
-- Foreground-task support for more reliable timer behavior.
+- No ads, no tracking, and no network services.
 - Flutter targets for Android, iOS, macOS, Linux, Windows, and Web.
 
 ## Project structure
@@ -70,6 +70,8 @@ Build a release APK:
 flutter build apk --release
 ```
 
+The Android package ID used for release builds is `io.github.babanov1403.tothemoontimer`.
+
 Build for web:
 
 ```sh
@@ -93,6 +95,17 @@ Main dependencies are declared in [pubspec.yaml](pubspec.yaml):
 5. Repeat until four focus sessions are completed.
 6. Celebrate the completed Pomodoro set and restart when ready.
 
+## F-Droid readiness
+
+This repository includes metadata that can be reused when submitting the app to the official F-Droid catalog:
+
+- [fastlane/metadata/android/en-US/short_description.txt](fastlane/metadata/android/en-US/short_description.txt) contains the short app listing description.
+- [fastlane/metadata/android/en-US/full_description.txt](fastlane/metadata/android/en-US/full_description.txt) contains the full app listing description.
+- [fastlane/metadata/android/en-US/changelogs/1.txt](fastlane/metadata/android/en-US/changelogs/1.txt) contains the changelog for Android version code 1.
+- [fdroid/metadata/io.github.babanov1403.tothemoontimer.yml](fdroid/metadata/io.github.babanov1403.tothemoontimer.yml) is a draft F-Droid build metadata file for the official fdroiddata repository.
+
+Before submission, tag the public source repository with `v1.0.0`, add screenshots, and copy the draft metadata into a fork of fdroiddata.
+
 ## License
 
-This project currently does not include a license file.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

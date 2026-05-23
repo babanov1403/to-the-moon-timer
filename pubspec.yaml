@@ -1,5 +1,5 @@
 name: pomodoro_timer
-description: A simple 25-minute Pomodoro timer app built with Flutter.
+description: A retro space-themed Pomodoro timer app built with Flutter.
 publish_to: 'none'
 
 version: 1.0.0+1
