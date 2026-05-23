@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:vibration/vibration.dart';
 
 import '../application/timer_config.dart';
 import '../application/timer_controller.dart';
@@ -101,10 +102,15 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         _elapsedFocusSeconds(timerState.remainingSeconds);
     if (elapsedFocusSeconds > 0) _recordFocusSeconds(elapsedFocusSeconds);
     _sessionRuntime.sync(timerState);
-    if (status != _prevStatus) _handleTransition(_prevStatus, status);
+    if (status != _prevStatus) {
+      final previousStatus = _prevStatus;
+      _handleTransition(previousStatus, status);
+      _vibrateOnSessionToggle(status);
+    }
     if (timerState.completedSetCount > _lastCompletedSetCount) {
       _lastCompletedSetCount = timerState.completedSetCount;
       _celebrationCtrl.forward(from: 0);
+      _vibrateSetComplete();
     }
     _prevStatus = status;
     _lastFocusRemainingSeconds =
@@ -126,6 +132,71 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         .then((statistics) {
       if (mounted) setState(() => _statistics = statistics);
     }).catchError((Object _) {});
+  }
+
+  void _vibrateOnSessionToggle(TimerStatus next) {
+    if (next == TimerStatus.finished || next == TimerStatus.breakFinished) {
+      _playSessionEndVibration();
+    }
+  }
+
+  Future<void> _playSessionEndVibration() async {
+    await _playContinuousVibration(
+      durationMs: 400,
+      fallback: _playSessionEndHapticFallback,
+    );
+  }
+
+  Future<void> _vibrateSetComplete() async {
+    await _playContinuousVibration(
+      durationMs: 700,
+      fallback: _playSetCompleteHapticFallback,
+    );
+  }
+
+  Future<void> _playContinuousVibration({
+    required int durationMs,
+    required VoidCallback fallback,
+  }) async {
+    try {
+      final hasVibrator = await Vibration.hasVibrator();
+      final hasCustomVibrations = await Vibration.hasCustomVibrationsSupport();
+      if (hasVibrator && hasCustomVibrations) {
+        await Vibration.vibrate(duration: durationMs, amplitude: 255);
+      } else {
+        fallback();
+      }
+    } catch (_) {
+      fallback();
+    }
+  }
+
+  void _playSessionEndHapticFallback() {
+    HapticFeedback.heavyImpact();
+    Future<void>.delayed(
+      const Duration(milliseconds: 180),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 360),
+      HapticFeedback.mediumImpact,
+    );
+  }
+
+  void _playSetCompleteHapticFallback() {
+    HapticFeedback.heavyImpact();
+    Future<void>.delayed(
+      const Duration(milliseconds: 180),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 360),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 540),
+      HapticFeedback.mediumImpact,
+    );
   }
 
   Future<void> _resetStatistics() async {
