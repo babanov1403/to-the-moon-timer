@@ -1,0 +1,35 @@
+{
+    "name": "To The Moon Timer",
+    "short_name": "Moon Timer",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#070015",
+    "theme_color": "#13002F",
+    "description": "A minimal retro space Pomodoro timer for focused sessions.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

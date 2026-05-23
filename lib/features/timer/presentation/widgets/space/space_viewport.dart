@@ -1,0 +1,66 @@
+import 'package:flutter/material.dart';
+import 'planet_data.dart';
+import 'space_palette.dart';
+import 'space_scene_painter.dart';
+import 'space_scene_state.dart';
+
+/// Renders the animated retro arcade space scene inside a bordered window.
+class SpaceViewport extends StatelessWidget {
+  const SpaceViewport({
+    super.key,
+    required this.state,
+    required this.planet,
+    required this.flightController,
+    required this.transitionController,
+    required this.exhaustController,
+    required this.starController,
+    required this.isPaused,
+  });
+
+  final SpaceSceneState state;
+  final PlanetData planet;
+  final AnimationController flightController;
+  final AnimationController transitionController;
+  final AnimationController exhaustController;
+  final AnimationController starController;
+  final bool isPaused;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        flightController,
+        transitionController,
+        exhaustController,
+        starController,
+      ]),
+      builder: (context, _) {
+        return Container(
+          decoration: BoxDecoration(
+            color: SpacePalette.spaceBg,
+            border: Border.all(
+              color: SpacePalette.shipBody.withValues(alpha: 0.4),
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: CustomPaint(
+              painter: SpaceScenePainter(
+                state: state,
+                planet: planet,
+                flightProgress: flightController.value,
+                transitionProgress: transitionController.value,
+                exhaustPhase: exhaustController.value,
+                starPhase: starController.value,
+                isPaused: isPaused,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
