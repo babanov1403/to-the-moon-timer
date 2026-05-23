@@ -66,32 +66,36 @@ class RetroTimerField extends StatelessWidget {
   }
 }
 
-/// Four small soft dots that preserve the colors of completed planets.
+/// Four small retro progress squares that preserve completed planet colors.
 class RetroPomodoroSetProgress extends StatelessWidget {
   const RetroPomodoroSetProgress({
     super.key,
     required this.completedPlanetColors,
+    required this.completedSessions,
     required this.totalSessions,
     required this.emptyColor,
   });
 
   final List<({Color colorA, Color colorB})> completedPlanetColors;
+  final int completedSessions;
   final int totalSessions;
   final Color emptyColor;
 
   @override
   Widget build(BuildContext context) {
     final safeTotal = math.max(1, totalSessions);
+    final completedCount = completedSessions.clamp(0, safeTotal);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(safeTotal, (index) {
-        final colors = index < completedPlanetColors.length
-            ? completedPlanetColors[index]
-            : null;
+        final isFilled =
+            index < completedCount && index < completedPlanetColors.length;
+        final colors = isFilled ? completedPlanetColors[index] : null;
+
         return Padding(
-          padding: EdgeInsets.only(right: index == safeTotal - 1 ? 0 : 12),
-          child: _SoftProgressDot(
+          padding: EdgeInsets.only(right: index == safeTotal - 1 ? 0 : 8),
+          child: _RetroProgressSquare(
             colorA: colors?.colorA,
             colorB: colors?.colorB,
             emptyColor: emptyColor,
@@ -102,8 +106,8 @@ class RetroPomodoroSetProgress extends StatelessWidget {
   }
 }
 
-class _SoftProgressDot extends StatelessWidget {
-  const _SoftProgressDot({
+class _RetroProgressSquare extends StatelessWidget {
+  const _RetroProgressSquare({
     required this.colorA,
     required this.colorB,
     required this.emptyColor,
@@ -119,37 +123,42 @@ class _SoftProgressDot extends StatelessWidget {
   Widget build(BuildContext context) {
     final fillA = colorA ?? emptyColor;
     final fillB = colorB ?? emptyColor;
+
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
-      width: 12,
-      height: 12,
+      width: 10,
+      height: 10,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(2),
         gradient: isFilled
-            ? RadialGradient(
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: [
-                  Color.lerp(fillA, Colors.white, 0.20)!,
-                  Color.lerp(fillA, fillB, 0.45)!,
+                  Color.lerp(fillA, Colors.white, 0.18)!,
+                  Color.lerp(fillA, fillB, 0.42)!,
                   fillB,
                 ],
-                stops: const [0.0, 0.55, 1.0],
+                stops: const [0.0, 0.52, 1.0],
               )
             : null,
-        color: isFilled ? null : emptyColor.withValues(alpha: 0.22),
+        color: isFilled ? null : emptyColor.withValues(alpha: 0.28),
         border: Border.all(
-          color: (isFilled ? fillA : emptyColor).withValues(alpha: 0.38),
+          color: (isFilled ? fillA : emptyColor).withValues(
+            alpha: isFilled ? 0.50 : 0.36,
+          ),
           width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: (isFilled ? fillA : emptyColor).withValues(
-              alpha: isFilled ? 0.22 : 0.10,
-            ),
-            blurRadius: isFilled ? 10 : 6,
-            spreadRadius: isFilled ? 1 : 0,
-          ),
-        ],
+        boxShadow: isFilled
+            ? [
+                BoxShadow(
+                  color: fillA.withValues(alpha: 0.22),
+                  blurRadius: 7,
+                  spreadRadius: 0.5,
+                ),
+              ]
+            : null,
       ),
     );
   }

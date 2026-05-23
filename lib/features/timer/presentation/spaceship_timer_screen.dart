@@ -488,6 +488,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
                           children: [
                             RetroPomodoroSetProgress(
                               completedPlanetColors: _completedPlanetColors,
+                              completedSessions: s.completedFocusSessions,
                               totalSessions: kPomodoroSessionsPerSet,
                               emptyColor: _muted,
                             ),
