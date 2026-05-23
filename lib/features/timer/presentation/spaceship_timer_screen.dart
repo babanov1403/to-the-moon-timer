@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:vibration/vibration.dart';
 
 import '../application/timer_config.dart';
 import '../application/timer_controller.dart';
 import '../application/timer_formatter.dart';
 import '../application/timer_session_runtime.dart';
 import '../application/timer_statistics_store.dart';
+import '../domain/timer_state.dart';
 import '../domain/timer_statistics.dart';
 import '../domain/timer_status.dart';
 import 'widgets/duration_picker_sheet.dart';
@@ -43,11 +45,12 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   int _lastCompletedSetCount = 0;
   final List<({Color colorA, Color colorB})> _completedPlanetColors = [];
 
-  static const Color _cyan = Color(0xFF00E5FF);
-  static const Color _yellow = Color(0xFFFFFF2E);
-  static const Color _muted = Color(0xFF6955C8);
-  static const Color _bg = Color(0xFF070015);
-  static const Color _textLight = Color(0xFFE9E5FF);
+  static const Color _cyan = Color(0xFF38BFD4);
+  static const Color _yellow = Color(0xFFF1D76A);
+  static const Color _muted = Color(0xFF6F789C);
+  static const Color _bg = Color(0xFF071126);
+  static const Color _panel = Color(0xFF111D3A);
+  static const Color _textLight = Color(0xFFE7E7FF);
 
   @override
   void initState() {
@@ -99,10 +102,15 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         _elapsedFocusSeconds(timerState.remainingSeconds);
     if (elapsedFocusSeconds > 0) _recordFocusSeconds(elapsedFocusSeconds);
     _sessionRuntime.sync(timerState);
-    if (status != _prevStatus) _handleTransition(_prevStatus, status);
+    if (status != _prevStatus) {
+      final previousStatus = _prevStatus;
+      _handleTransition(previousStatus, status);
+      _vibrateOnSessionToggle(status);
+    }
     if (timerState.completedSetCount > _lastCompletedSetCount) {
       _lastCompletedSetCount = timerState.completedSetCount;
       _celebrationCtrl.forward(from: 0);
+      _vibrateSetComplete();
     }
     _prevStatus = status;
     _lastFocusRemainingSeconds =
@@ -124,6 +132,71 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         .then((statistics) {
       if (mounted) setState(() => _statistics = statistics);
     }).catchError((Object _) {});
+  }
+
+  void _vibrateOnSessionToggle(TimerStatus next) {
+    if (next == TimerStatus.finished || next == TimerStatus.breakFinished) {
+      _playSessionEndVibration();
+    }
+  }
+
+  Future<void> _playSessionEndVibration() async {
+    await _playContinuousVibration(
+      durationMs: 400,
+      fallback: _playSessionEndHapticFallback,
+    );
+  }
+
+  Future<void> _vibrateSetComplete() async {
+    await _playContinuousVibration(
+      durationMs: 700,
+      fallback: _playSetCompleteHapticFallback,
+    );
+  }
+
+  Future<void> _playContinuousVibration({
+    required int durationMs,
+    required VoidCallback fallback,
+  }) async {
+    try {
+      final hasVibrator = await Vibration.hasVibrator();
+      final hasCustomVibrations = await Vibration.hasCustomVibrationsSupport();
+      if (hasVibrator && hasCustomVibrations) {
+        await Vibration.vibrate(duration: durationMs, amplitude: 255);
+      } else {
+        fallback();
+      }
+    } catch (_) {
+      fallback();
+    }
+  }
+
+  void _playSessionEndHapticFallback() {
+    HapticFeedback.heavyImpact();
+    Future<void>.delayed(
+      const Duration(milliseconds: 180),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 360),
+      HapticFeedback.mediumImpact,
+    );
+  }
+
+  void _playSetCompleteHapticFallback() {
+    HapticFeedback.heavyImpact();
+    Future<void>.delayed(
+      const Duration(milliseconds: 180),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 360),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 540),
+      HapticFeedback.mediumImpact,
+    );
   }
 
   Future<void> _resetStatistics() async {
@@ -372,134 +445,229 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
           .copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
         backgroundColor: _bg,
-        body: SafeArea(
-            child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                RetroLabel(text: isBreak ? 'BREAK' : 'FOCUS', color: accent),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _RetroHeaderButton(
-                        icon: Icons.query_stats_rounded,
-                        semanticLabel: 'Statistics',
-                        color: _cyan,
-                        onTap: _showStatistics,
-                      ),
-                      const SizedBox(width: 10),
-                      _RetroHeaderButton(
-                        icon: Icons.feedback_outlined,
-                        semanticLabel: 'Feedback',
-                        color: _yellow,
-                        onTap: _showFeedback,
-                      ),
-                    ],
-                  ),
-                ),
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF071126),
+                Color(0xFF0B1833),
+                Color(0xFF171343),
               ],
+              stops: [0.0, 0.58, 1.0],
             ),
           ),
-          Expanded(
-              flex: 5,
-              child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: SpaceViewport(
-                      state: _scene,
-                      planet: _planet,
-                      flightController: _flightCtrl,
-                      transitionController: _transitionCtrl,
-                      exhaustController: _exhaustCtrl,
-                      starController: _starCtrl,
-                      isPaused: s.status == TimerStatus.paused ||
-                          s.status == TimerStatus.breakPaused))),
-          Expanded(
-              flex: 4,
-              child: Center(
-                  child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  RetroTimerField(
-                      timeLabel: TimerFormatter.format(s.remainingSeconds),
-                      isRunning: isActive,
-                      accentColor: accent,
-                      onTap: _openPicker),
-                  const SizedBox(height: 18),
-                  Stack(
-                    clipBehavior: Clip.none,
+          child: Stack(
+            children: [
+              Positioned(
+                top: -120,
+                right: -90,
+                child: _AtmosphereOrb(
+                  color: _cyan.withValues(alpha: 0.12),
+                  size: 260,
+                ),
+              ),
+              Positioned(
+                bottom: 90,
+                left: -120,
+                child: _AtmosphereOrb(
+                  color: _muted.withValues(alpha: 0.18),
+                  size: 300,
+                ),
+              ),
+              SafeArea(
+                  child: Column(children: [
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      RetroPomodoroSetProgress(
-                        completedPlanetColors: _completedPlanetColors,
-                        totalSessions: kPomodoroSessionsPerSet,
-                        emptyColor: _muted,
-                      ),
-                      Positioned(
-                        top: -54,
-                        right: -62,
-                        child: AnimatedBuilder(
-                          animation: _celebrationCtrl,
-                          builder: (context, _) {
-                            if (_celebrationCtrl.value == 0) {
-                              return const SizedBox.shrink();
-                            }
-                            return RetroFireworks(
-                              progress: _celebrationCtrl.value,
-                              primaryColor: _planet.colorA,
-                              secondaryColor: _yellow,
-                            );
-                          },
+                      RetroLabel(
+                          text: isBreak ? 'Rest' : 'Focus', color: accent),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _RetroHeaderButton(
+                              icon: Icons.query_stats_rounded,
+                              semanticLabel: 'Statistics',
+                              color: _cyan,
+                              onTap: _showStatistics,
+                            ),
+                            const SizedBox(width: 10),
+                            _RetroHeaderButton(
+                              icon: Icons.feedback_outlined,
+                              semanticLabel: 'Feedback',
+                              color: _yellow,
+                              onTap: _showFeedback,
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ],
-              ))),
-          Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child:
-                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                RetroModeLabel(
-                    label: 'WORK',
-                    active: !isBreak,
-                    activeColor: _cyan,
-                    mutedColor: _muted),
-                const SizedBox(width: 32),
-                RetroModeLabel(
-                    label: 'BREAK',
-                    active: isBreak,
-                    activeColor: _yellow,
-                    mutedColor: _muted),
+                ),
+                Expanded(
+                    flex: 5,
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: SpaceViewport(
+                                  state: _scene,
+                                  planet: _planet,
+                                  flightController: _flightCtrl,
+                                  transitionController: _transitionCtrl,
+                                  exhaustController: _exhaustCtrl,
+                                  starController: _starCtrl,
+                                  isPaused: s.status == TimerStatus.paused ||
+                                      s.status == TimerStatus.breakPaused),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'One task. One orbit.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _textLight.withValues(alpha: 0.70),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ],
+                        ))),
+                Expanded(
+                    flex: 4,
+                    child: Center(
+                        child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        RetroTimerField(
+                            timeLabel:
+                                TimerFormatter.format(s.remainingSeconds),
+                            isRunning: isActive,
+                            accentColor: accent,
+                            onTap: _openPicker),
+                        const SizedBox(height: 18),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            RetroPomodoroSetProgress(
+                              completedPlanetColors: _completedPlanetColors,
+                              completedSessions: s.completedFocusSessions,
+                              totalSessions: kPomodoroSessionsPerSet,
+                              emptyColor: _muted,
+                            ),
+                            Positioned(
+                              top: -54,
+                              right: -62,
+                              child: AnimatedBuilder(
+                                animation: _celebrationCtrl,
+                                builder: (context, _) {
+                                  if (_celebrationCtrl.value == 0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return RetroFireworks(
+                                    progress: _celebrationCtrl.value,
+                                    primaryColor: _planet.colorA,
+                                    secondaryColor: _yellow,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ))),
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          RetroModeLabel(
+                              label: 'Focus',
+                              active: !isBreak,
+                              activeColor: _cyan,
+                              mutedColor: _muted),
+                          const SizedBox(width: 32),
+                          RetroModeLabel(
+                              label: 'Rest',
+                              active: isBreak,
+                              activeColor: _yellow,
+                              mutedColor: _muted),
+                        ])),
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 32),
+                    child: RetroPlayButton(
+                        label: _playButtonLabel(s),
+                        isRunning: isActive,
+                        isFinished: s.isBreakFinished,
+                        isRestart: s.isSetComplete,
+                        accentColor: accent,
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          if (s.isSetComplete) {
+                            _controller.restartSet();
+                            _reset();
+                          } else {
+                            _controller.togglePlayPause();
+                          }
+                        })),
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                        width: 134,
+                        height: 5,
+                        decoration: BoxDecoration(
+                            color: _textLight.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(3)))),
               ])),
-          Padding(
-              padding: const EdgeInsets.only(bottom: 32),
-              child: RetroPlayButton(
-                  isRunning: isActive,
-                  isFinished: s.isBreakFinished,
-                  isRestart: s.isSetComplete,
-                  accentColor: accent,
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    if (s.isSetComplete) {
-                      _controller.restartSet();
-                      _reset();
-                    } else {
-                      _controller.togglePlayPause();
-                    }
-                  })),
-          Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                  width: 134,
-                  height: 5,
-                  decoration: BoxDecoration(
-                      color: _textLight.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(3)))),
-        ])),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _playButtonLabel(TimerState s) {
+    if (s.isSetComplete) return 'Restart Orbit';
+    if (_isActiveBreakState(s)) {
+      return _isActiveRunningState(s) ? 'Pause Rest' : 'Start Rest';
+    }
+    return _isActiveRunningState(s) ? 'Pause Focus' : 'Start Focus';
+  }
+
+  bool _isActiveBreakState(TimerState s) => s.isOnBreak;
+
+  bool _isActiveRunningState(TimerState s) => s.isRunning || s.isBreakRunning;
+}
+
+class _AtmosphereOrb extends StatelessWidget {
+  const _AtmosphereOrb({required this.color, required this.size});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              color,
+              color.withValues(alpha: 0.0),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -529,14 +697,15 @@ class _RetroHeaderButton extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: _SpaceshipTimerScreenState._bg.withValues(alpha: 0.82),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: color.withValues(alpha: 0.82), width: 2),
+            color: _SpaceshipTimerScreenState._panel.withValues(alpha: 0.58),
+            borderRadius: BorderRadius.circular(18),
+            border:
+                Border.all(color: color.withValues(alpha: 0.36), width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: color.withValues(alpha: 0.20),
-                blurRadius: 12,
-                spreadRadius: 1,
+                color: color.withValues(alpha: 0.10),
+                blurRadius: 16,
+                spreadRadius: 0,
               ),
             ],
           ),
@@ -566,14 +735,15 @@ class _RetroInfoDialog extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F0F2A),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: accentColor, width: 2),
+          color: const Color(0xFF111D3A),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+              color: accentColor.withValues(alpha: 0.34), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: accentColor.withValues(alpha: 0.30),
-              blurRadius: 22,
-              spreadRadius: 3,
+              color: accentColor.withValues(alpha: 0.14),
+              blurRadius: 28,
+              spreadRadius: 1,
             ),
           ],
         ),
@@ -626,9 +796,9 @@ class _RetroStatRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF070015),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: accentColor.withValues(alpha: 0.45)),
+        color: const Color(0xFF081329),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accentColor.withValues(alpha: 0.26)),
       ),
       child: Row(
         children: [
@@ -676,14 +846,14 @@ class _RetroDialogButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFF070015),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: color, width: 2),
+          color: const Color(0xFF081329),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: color.withValues(alpha: 0.44), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.24),
-              blurRadius: 14,
-              spreadRadius: 1,
+              color: color.withValues(alpha: 0.12),
+              blurRadius: 18,
+              spreadRadius: 0,
             ),
           ],
         ),

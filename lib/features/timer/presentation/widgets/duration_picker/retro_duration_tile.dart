@@ -26,9 +26,9 @@ class RetroDurationTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        splashColor: selectedColor.withValues(alpha: 0.16),
-        highlightColor: selectedColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(24),
+        splashColor: selectedColor.withValues(alpha: 0.10),
+        highlightColor: selectedColor.withValues(alpha: 0.05),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
@@ -47,19 +47,22 @@ class RetroDurationTile extends StatelessWidget {
   BoxDecoration _decoration(Color borderColor) {
     return BoxDecoration(
       color: selected
-          ? selectedColor.withValues(alpha: 0.09)
-          : kDurationPickerPanel,
-      borderRadius: BorderRadius.circular(4),
-      border: Border.all(color: borderColor, width: selected ? 2 : 1),
+          ? selectedColor.withValues(alpha: 0.11)
+          : kDurationPickerPanel.withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(
+        color: borderColor.withValues(alpha: selected ? 0.62 : 0.34),
+        width: 1.2,
+      ),
       boxShadow: selected ? [_shadow()] : [],
     );
   }
 
   BoxShadow _shadow() {
     return BoxShadow(
-      color: selectedColor.withValues(alpha: 0.28),
-      blurRadius: 14,
-      spreadRadius: 1,
+      color: selectedColor.withValues(alpha: 0.14),
+      blurRadius: 18,
+      spreadRadius: 0,
     );
   }
 }
@@ -70,9 +73,16 @@ class _SelectedMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      left: 6,
-      top: 6,
-      child: Container(width: 6, height: 6, color: kDurationPickerYellow),
+      left: 10,
+      top: 10,
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: const BoxDecoration(
+          color: kDurationPickerYellow,
+          shape: BoxShape.circle,
+        ),
+      ),
     );
   }
 }

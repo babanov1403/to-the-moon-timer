@@ -37,15 +37,29 @@ class SpaceViewport extends StatelessWidget {
       builder: (context, _) {
         return Container(
           decoration: BoxDecoration(
-            color: SpacePalette.spaceBg,
-            border: Border.all(
-              color: SpacePalette.shipBody.withValues(alpha: 0.4),
-              width: 2,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                SpacePalette.spaceBgAlt.withValues(alpha: 0.72),
+                SpacePalette.spaceBg,
+              ],
             ),
-            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: SpacePalette.shipBody.withValues(alpha: 0.22),
+              width: 1.2,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: SpacePalette.shipBody.withValues(alpha: 0.10),
+                blurRadius: 24,
+                spreadRadius: 1,
+              ),
+            ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(22),
             child: CustomPaint(
               painter: SpaceScenePainter(
                 state: state,

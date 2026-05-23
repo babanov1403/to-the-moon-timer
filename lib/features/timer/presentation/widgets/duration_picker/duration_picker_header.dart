@@ -17,7 +17,7 @@ class DurationPickerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       child: Row(
         children: [
           RetroHeaderButton(
@@ -28,7 +28,7 @@ class DurationPickerHeader extends StatelessWidget {
           ),
           const Expanded(
             child: Text(
-              'DURATION',
+              'Duration',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: kDurationPickerTitle,

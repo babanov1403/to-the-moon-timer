@@ -146,9 +146,7 @@ class SpaceScenePainter extends CustomPainter {
   void _paintLanded(Canvas canvas, Size size) {
     final center = _planetCenter(size);
     drawPlanet(canvas, planet, center, 1.0);
-    final bob =
-        isPaused ? 0.0 : math.sin(exhaustPhase * math.pi * 2) * SpacePalette.px;
-    final shipPos = Offset(center.dx, center.dy - planet.radius - 14 + bob);
+    final shipPos = Offset(center.dx, center.dy - planet.radius - 14);
     drawShip(canvas, shipPos, -math.pi / 2);
   }
 

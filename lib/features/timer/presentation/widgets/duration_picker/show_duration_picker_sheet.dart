@@ -18,7 +18,7 @@ Future<void> showDurationPickerSheet({
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.58),
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (_) => DurationPickerSheet(
       initialFocusIndex: initialFocusIndex,

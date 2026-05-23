@@ -42,7 +42,7 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 486,
+      height: 500,
       decoration: _sheetDecoration(),
       child: Column(
         children: [
@@ -91,8 +91,13 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
             ),
           ),
           const RetroDivider(),
-          Container(
-            color: kDurationPickerPanel,
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: kDurationPickerPanel.withValues(alpha: 0.72),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18),
+              ),
+            ),
             child: DebugDurationChip(
               onTap: () => Navigator.of(context).pop(
                 const DurationPickerResult.debug(),
@@ -106,14 +111,29 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
 
   BoxDecoration _sheetDecoration() {
     return BoxDecoration(
-      color: kDurationPickerSheetBg,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-      border: Border.all(color: kDurationPickerBorder, width: 2),
+      gradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xFF111D3A),
+          kDurationPickerSheetBg,
+        ],
+      ),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      border: Border.all(
+        color: kDurationPickerBorder.withValues(alpha: 0.74),
+        width: 1.2,
+      ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.55),
-          blurRadius: 24,
-          offset: const Offset(0, -8),
+          color: Colors.black.withValues(alpha: 0.34),
+          blurRadius: 30,
+          offset: const Offset(0, -10),
+        ),
+        BoxShadow(
+          color: kDurationPickerCyan.withValues(alpha: 0.08),
+          blurRadius: 28,
+          spreadRadius: 1,
         ),
       ],
     );
@@ -138,13 +158,13 @@ class _DurationPageSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: kDurationPickerSheetBg,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      color: kDurationPickerSheetBg.withValues(alpha: 0.38),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
         children: [
           Expanded(
             child: _DurationPageButton(
-              label: 'FOCUS',
+              label: 'Focus',
               minutes: focusMinutes,
               color: kDurationPickerCyan,
               selected: page == _DurationPickerPage.focus,
@@ -154,7 +174,7 @@ class _DurationPageSelector extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: _DurationPageButton(
-              label: 'BREAK',
+              label: 'Rest',
               minutes: breakMinutes,
               color: kDurationPickerYellow,
               selected: page == _DurationPickerPage.breakTime,
@@ -188,20 +208,31 @@ class _DurationPageButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        splashColor: color.withValues(alpha: 0.16),
-        highlightColor: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(24),
+        splashColor: color.withValues(alpha: 0.10),
+        highlightColor: color.withValues(alpha: 0.05),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color:
-                selected ? color.withValues(alpha: 0.1) : kDurationPickerPanel,
-            borderRadius: BorderRadius.circular(4),
+            color: selected
+                ? color.withValues(alpha: 0.12)
+                : kDurationPickerPanel.withValues(alpha: 0.76),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: selected ? color : kDurationPickerMuted,
-              width: selected ? 2 : 1,
+              color: selected
+                  ? color.withValues(alpha: 0.62)
+                  : kDurationPickerMuted.withValues(alpha: 0.34),
+              width: 1.2,
             ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.12),
+                      blurRadius: 18,
+                    ),
+                  ]
+                : [],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
