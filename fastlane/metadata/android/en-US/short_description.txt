@@ -1,0 +1,1 @@
+To The Moon Timer is a retro space-themed Pomodoro timer. Launch a spaceship for every focus session, land on pixel-art planets, take breaks, and track focus time locally.

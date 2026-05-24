@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../application/timer_config.dart';
 import 'duration_picker_result.dart';
 import 'duration_picker_sheet.dart';
 
@@ -12,6 +13,9 @@ Future<void> showDurationPickerSheet({
       onDurations,
   required VoidCallback onDebug,
   required VoidCallback onReset,
+  List<int>? focusOptions,
+  List<int>? breakOptions,
+  bool showBreakOption = true,
 }) async {
   final result = await showModalBottomSheet<DurationPickerResult>(
     context: context,
@@ -23,6 +27,9 @@ Future<void> showDurationPickerSheet({
     builder: (_) => DurationPickerSheet(
       initialFocusIndex: initialFocusIndex,
       initialBreakIndex: initialBreakIndex,
+      focusOptions: focusOptions ?? kDurationMinutes,
+      breakOptions: breakOptions ?? kBreakDurationMinutes,
+      showBreakOption: showBreakOption,
     ),
   );
 

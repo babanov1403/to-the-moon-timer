@@ -14,10 +14,16 @@ class DurationPickerSheet extends StatefulWidget {
     super.key,
     required this.initialFocusIndex,
     required this.initialBreakIndex,
+    this.focusOptions = kDurationMinutes,
+    this.breakOptions = kBreakDurationMinutes,
+    this.showBreakOption = true,
   });
 
   final int initialFocusIndex;
   final int initialBreakIndex;
+  final List<int> focusOptions;
+  final List<int> breakOptions;
+  final bool showBreakOption;
 
   @override
   State<DurationPickerSheet> createState() => _DurationPickerSheetState();
@@ -31,9 +37,10 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _pickedFocusIndex = _clampIndex(widget.initialFocusIndex, kDurationMinutes);
+    _pickedFocusIndex =
+        _clampIndex(widget.initialFocusIndex, widget.focusOptions);
     _pickedBreakIndex =
-        _clampIndex(widget.initialBreakIndex, kBreakDurationMinutes);
+        _clampIndex(widget.initialBreakIndex, widget.breakOptions);
   }
 
   int _clampIndex(int index, List<int> minutes) =>
@@ -52,16 +59,17 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
             ),
             onDone: () => Navigator.of(context).pop(
               DurationPickerResult.durations(
-                focusMinutes: kDurationMinutes[_pickedFocusIndex],
-                breakMinutes: kBreakDurationMinutes[_pickedBreakIndex],
+                focusMinutes: widget.focusOptions[_pickedFocusIndex],
+                breakMinutes: widget.breakOptions[_pickedBreakIndex],
               ),
             ),
           ),
           const RetroDivider(),
           _DurationPageSelector(
             page: _page,
-            focusMinutes: kDurationMinutes[_pickedFocusIndex],
-            breakMinutes: kBreakDurationMinutes[_pickedBreakIndex],
+            focusMinutes: widget.focusOptions[_pickedFocusIndex],
+            breakMinutes: widget.breakOptions[_pickedBreakIndex],
+            showBreakOption: widget.showBreakOption,
             onChanged: (page) => setState(() => _page = page),
           ),
           const RetroDivider(),
@@ -74,8 +82,8 @@ class _DurationPickerSheetState extends State<DurationPickerSheet> {
                     ? _pickedFocusIndex
                     : _pickedBreakIndex,
                 minutes: _page == _DurationPickerPage.focus
-                    ? kDurationMinutes
-                    : kBreakDurationMinutes,
+                    ? widget.focusOptions
+                    : widget.breakOptions,
                 selectedColor: _page == _DurationPickerPage.focus
                     ? kDurationPickerCyan
                     : kDurationPickerYellow,
@@ -147,12 +155,14 @@ class _DurationPageSelector extends StatelessWidget {
     required this.page,
     required this.focusMinutes,
     required this.breakMinutes,
+    required this.showBreakOption,
     required this.onChanged,
   });
 
   final _DurationPickerPage page;
   final int focusMinutes;
   final int breakMinutes;
+  final bool showBreakOption;
   final ValueChanged<_DurationPickerPage> onChanged;
 
   @override
@@ -171,16 +181,18 @@ class _DurationPageSelector extends StatelessWidget {
               onTap: () => onChanged(_DurationPickerPage.focus),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _DurationPageButton(
-              label: 'Rest',
-              minutes: breakMinutes,
-              color: kDurationPickerYellow,
-              selected: page == _DurationPickerPage.breakTime,
-              onTap: () => onChanged(_DurationPickerPage.breakTime),
+          if (showBreakOption) ...[
+            const SizedBox(width: 12),
+            Expanded(
+              child: _DurationPageButton(
+                label: 'Rest',
+                minutes: breakMinutes,
+                color: kDurationPickerYellow,
+                selected: page == _DurationPickerPage.breakTime,
+                onTap: () => onChanged(_DurationPickerPage.breakTime),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

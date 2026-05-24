@@ -4,6 +4,7 @@ import 'planet_data.dart';
 import 'planet_painter.dart';
 import 'ship_painter.dart';
 import 'space_palette.dart';
+import 'ship_style.dart';
 import 'space_scene_state.dart';
 import 'star_painter.dart';
 
@@ -17,6 +18,13 @@ class SpaceScenePainter extends CustomPainter {
     required this.exhaustPhase,
     required this.starPhase,
     required this.isPaused,
+    this.shipStyle = const ShipStyle(
+      bodyColor: SpacePalette.shipBody,
+      accentColor: SpacePalette.shipAccent,
+      darkColor: SpacePalette.shipDark,
+      exhaustHotColor: SpacePalette.exhaustOrange,
+      exhaustCoreColor: SpacePalette.exhaustWhite,
+    ),
   });
 
   final SpaceSceneState state;
@@ -26,6 +34,7 @@ class SpaceScenePainter extends CustomPainter {
   final double exhaustPhase;
   final double starPhase;
   final bool isPaused;
+  final ShipStyle shipStyle;
 
   // Planet rests at bottom-center of the viewport.
   Offset _planetCenter(Size size) => Offset(size.width / 2, size.height * 0.78);
@@ -146,8 +155,11 @@ class SpaceScenePainter extends CustomPainter {
   void _paintLanded(Canvas canvas, Size size) {
     final center = _planetCenter(size);
     drawPlanet(canvas, planet, center, 1.0);
-    final shipPos = Offset(center.dx, center.dy - planet.radius - 14);
-    drawShip(canvas, shipPos, -math.pi / 2);
+    final shipPos = Offset(
+      center.dx,
+      center.dy - planet.radius - 6 * shipStyle.scale,
+    );
+    drawShip(canvas, shipPos, -math.pi / 2, style: shipStyle);
   }
 
   void _paintTakingOff(Canvas canvas, Size size) {
@@ -157,21 +169,30 @@ class SpaceScenePainter extends CustomPainter {
     drawPlanet(canvas, planet, planetPos, 1.0 - t);
 
     final startPos = Offset(
-        _planetCenter(size).dx, _planetCenter(size).dy - planet.radius - 14);
+      _planetCenter(size).dx,
+      _planetCenter(size).dy - planet.radius - 6 * shipStyle.scale,
+    );
     final shipPos = Offset.lerp(startPos, _flightShipCenter(size), t)!;
     final angle = lerpAngle(-math.pi / 2, _flightAngle, t);
-    drawExhaust(canvas, shipPos, angle, exhaustPhase, intensity: 0.6 + t * 0.4);
-    drawShip(canvas, shipPos, angle);
+    drawExhaust(
+      canvas,
+      shipPos,
+      angle,
+      exhaustPhase,
+      intensity: 0.6 + t * 0.4,
+      style: shipStyle,
+    );
+    drawShip(canvas, shipPos, angle, style: shipStyle);
   }
 
   void _paintFlying(Canvas canvas, Size size) {
     final shipPos = _flightShipCenter(size);
-    drawExhaust(canvas, shipPos, _flightAngle, exhaustPhase);
-    drawShip(canvas, shipPos, _flightAngle);
+    drawExhaust(canvas, shipPos, _flightAngle, exhaustPhase, style: shipStyle);
+    drawShip(canvas, shipPos, _flightAngle, style: shipStyle);
   }
 
   void _paintPausedInSpace(Canvas canvas, Size size) {
-    drawShip(canvas, _flightShipCenter(size), _flightAngle);
+    drawShip(canvas, _flightShipCenter(size), _flightAngle, style: shipStyle);
   }
 
   void _paintLanding(Canvas canvas, Size size) {
@@ -181,12 +202,20 @@ class SpaceScenePainter extends CustomPainter {
     drawPlanet(canvas, planet, planetPos, t);
 
     final endPos = Offset(
-        _planetCenter(size).dx, _planetCenter(size).dy - planet.radius - 14);
+      _planetCenter(size).dx,
+      _planetCenter(size).dy - planet.radius - 6 * shipStyle.scale,
+    );
     final shipPos = Offset.lerp(_flightShipCenter(size), endPos, t)!;
     final angle = lerpAngle(_flightAngle, -math.pi / 2, t);
-    drawExhaust(canvas, shipPos, angle, exhaustPhase,
-        intensity: (1.0 - t) * 0.8);
-    drawShip(canvas, shipPos, angle);
+    drawExhaust(
+      canvas,
+      shipPos,
+      angle,
+      exhaustPhase,
+      intensity: (1.0 - t) * 0.8,
+      style: shipStyle,
+    );
+    drawShip(canvas, shipPos, angle, style: shipStyle);
   }
 
   @override
@@ -197,5 +226,6 @@ class SpaceScenePainter extends CustomPainter {
       old.transitionProgress != transitionProgress ||
       old.exhaustPhase != exhaustPhase ||
       old.starPhase != starPhase ||
-      old.isPaused != isPaused;
+      old.isPaused != isPaused ||
+      old.shipStyle != shipStyle;
 }

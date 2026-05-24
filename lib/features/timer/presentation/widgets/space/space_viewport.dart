@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'planet_data.dart';
+import 'ship_style.dart';
 import 'space_palette.dart';
 import 'space_scene_painter.dart';
 import 'space_scene_state.dart';
@@ -15,6 +16,13 @@ class SpaceViewport extends StatelessWidget {
     required this.exhaustController,
     required this.starController,
     required this.isPaused,
+    this.shipStyle = const ShipStyle(
+      bodyColor: SpacePalette.shipBody,
+      accentColor: SpacePalette.shipAccent,
+      darkColor: SpacePalette.shipDark,
+      exhaustHotColor: SpacePalette.exhaustOrange,
+      exhaustCoreColor: SpacePalette.exhaustWhite,
+    ),
   });
 
   final SpaceSceneState state;
@@ -24,6 +32,7 @@ class SpaceViewport extends StatelessWidget {
   final AnimationController exhaustController;
   final AnimationController starController;
   final bool isPaused;
+  final ShipStyle shipStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -46,13 +55,13 @@ class SpaceViewport extends StatelessWidget {
               ],
             ),
             border: Border.all(
-              color: SpacePalette.shipBody.withValues(alpha: 0.22),
+              color: shipStyle.bodyColor.withValues(alpha: 0.22),
               width: 1.2,
             ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: SpacePalette.shipBody.withValues(alpha: 0.10),
+                color: shipStyle.bodyColor.withValues(alpha: 0.10),
                 blurRadius: 24,
                 spreadRadius: 1,
               ),
@@ -69,6 +78,7 @@ class SpaceViewport extends StatelessWidget {
                 exhaustPhase: exhaustController.value,
                 starPhase: starController.value,
                 isPaused: isPaused,
+                shipStyle: shipStyle,
               ),
               child: const SizedBox.expand(),
             ),

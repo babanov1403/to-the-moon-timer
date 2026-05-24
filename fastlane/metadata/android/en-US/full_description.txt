@@ -1,0 +1,12 @@
+To The Moon Timer turns Pomodoro focus sessions into a small retro arcade space journey.
+
+Start a focus session to launch your spaceship, fly through a calm cosmic scene, and land on a new pixel-art planet when the session is complete. Take a break, then continue through the Pomodoro cycle until a full set is done.
+
+Features:
+- Retro space-themed Pomodoro timer.
+- Adjustable focus sessions from 10 to 90 minutes.
+- Default 25-minute focus sessions and 5-minute breaks.
+- Four focus sessions per Pomodoro set.
+- Pause, resume, restart, and duration picker flows.
+- Local focus-time statistics.
+- No ads, no tracking, and no network services.
