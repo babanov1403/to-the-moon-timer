@@ -171,7 +171,8 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
       if (elapsedTimerSeconds > 0) _recordFocusSeconds(elapsedTimerSeconds);
       _syncFreeTimerRuntime(state);
       _handleFreeTimerTransition(state.status);
-      _lastFreeTimerRemainingSeconds = state.isRunning ? state.remainingSeconds : null;
+      _lastFreeTimerRemainingSeconds =
+          state.isRunning ? state.remainingSeconds : null;
     } else {
       _lastFreeTimerRemainingSeconds = null;
     }
@@ -336,6 +337,51 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
       const Duration(milliseconds: 540),
       HapticFeedback.mediumImpact,
     );
+  }
+
+  Future<bool> _confirmResetStatistics(BuildContext context) async {
+    HapticFeedback.lightImpact();
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => _RetroInfoDialog(
+            title: 'RESET STATS?',
+            accentColor: _yellow,
+            children: [
+              Text(
+                'This will permanently clear total flight time and every daily heatmap cell.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _textLight.withValues(alpha: 0.72),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _RetroDialogButton(
+                      label: 'CANCEL',
+                      color: _cyan,
+                      onTap: () => Navigator.of(context).pop(false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _RetroDialogButton(
+                      label: 'RESET',
+                      color: _yellow,
+                      onTap: () => Navigator.of(context).pop(true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<void> _resetStatistics() async {
@@ -616,6 +662,8 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
             label: 'RESET STATS',
             color: _yellow,
             onTap: () async {
+              final confirmed = await _confirmResetStatistics(context);
+              if (!confirmed) return;
               await _resetStatistics();
               if (context.mounted) Navigator.of(context).pop();
             },
@@ -1433,6 +1481,15 @@ class _RetroFlightHeatmap extends StatelessWidget {
 
   static const int _weekCount = 6;
   static const int _daysPerWeek = 7;
+  static const List<String> _weekdayLabels = [
+    'M',
+    'T',
+    'W',
+    'T',
+    'F',
+    'S',
+    'S'
+  ];
 
   final TimerStatistics statistics;
   final DateTime now;
@@ -1485,14 +1542,16 @@ class _RetroFlightHeatmap extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 1),
                 child: Column(
-                  children: const [
-                    _HeatmapWeekdayLabel('M'),
-                    _HeatmapWeekdayLabel('T'),
-                    _HeatmapWeekdayLabel('W'),
-                    _HeatmapWeekdayLabel('T'),
-                    _HeatmapWeekdayLabel('F'),
-                    _HeatmapWeekdayLabel('S'),
-                    _HeatmapWeekdayLabel('S'),
+                  children: [
+                    for (var weekday = 0;
+                        weekday < _weekdayLabels.length;
+                        weekday++)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: weekday == _weekdayLabels.length - 1 ? 0 : 5,
+                        ),
+                        child: _HeatmapWeekdayLabel(_weekdayLabels[weekday]),
+                      ),
                   ],
                 ),
               ),
@@ -1542,7 +1601,8 @@ class _RetroFlightHeatmap extends StatelessWidget {
 
   static List<DateTime> _heatmapDays(DateTime now) {
     final today = DateTime(now.year, now.month, now.day);
-    final endOfWeek = today.add(Duration(days: DateTime.sunday - today.weekday));
+    final endOfWeek =
+        today.add(Duration(days: DateTime.sunday - today.weekday));
     final firstDay = endOfWeek.subtract(
       const Duration(days: _weekCount * _daysPerWeek - 1),
     );
@@ -1606,7 +1666,8 @@ class _HeatmapDayCell extends StatelessWidget {
     final label = active ? _formatCellDuration(seconds) : '';
 
     return Semantics(
-      label: '${day.day}.${day.month}: ${active ? _formatSemanticDuration(seconds) : 'no flight time'}',
+      label:
+          '${day.day}.${day.month}: ${active ? _formatSemanticDuration(seconds) : 'no flight time'}',
       child: Container(
         height: 24,
         alignment: Alignment.center,
@@ -1649,15 +1710,17 @@ class _HeatmapDayCell extends StatelessWidget {
       return emptyColor.withValues(alpha: 0.10);
     }
 
-    final alpha = switch (seconds) {
-      < 15 * 60 => 0.36,
-      < 30 * 60 => 0.52,
-      < 60 * 60 => 0.70,
-      < 120 * 60 => 0.86,
-      _ => 1.0,
+    return switch (seconds) {
+      < 30 * 60 =>
+        Color.lerp(emptyColor, accentColor, 0.18)!.withValues(alpha: 0.52),
+      < 60 * 60 =>
+        Color.lerp(emptyColor, accentColor, 0.42)!.withValues(alpha: 0.70),
+      < 90 * 60 => Color.lerp(accentColor, const Color(0xFF5CF0C8), 0.35)!
+          .withValues(alpha: 0.82),
+      < 120 * 60 => Color.lerp(accentColor, const Color(0xFF5CF0C8), 0.68)!
+          .withValues(alpha: 0.90),
+      _ => const Color(0xFF5CF0C8).withValues(alpha: 0.95),
     };
-    return Color.lerp(accentColor, const Color(0xFF5CF0C8), alpha)!
-        .withValues(alpha: 0.95);
   }
 
   static String _formatCellDuration(int totalSeconds) {
