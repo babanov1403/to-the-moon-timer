@@ -8,6 +8,7 @@ import '../application/free_timer_controller.dart';
 import '../application/timer_config.dart';
 import '../application/timer_controller.dart';
 import '../application/timer_formatter.dart';
+import '../application/timer_notification_config.dart';
 import '../application/timer_session_runtime.dart';
 import '../application/timer_statistics_store.dart';
 import '../domain/free_timer_state.dart';
@@ -56,6 +57,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   TimerStatistics _statistics = TimerStatistics.empty();
   Future<void> _statisticsUpdate = Future<void>.value();
   int? _lastFocusRemainingSeconds;
+  int? _lastFreeTimerRemainingSeconds;
   PlanetData _planet = PlanetData.generate(42);
   int _planetSeed = 42;
   int _lastCompletedSetCount = 0;
@@ -140,8 +142,8 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     final elapsedFocusSeconds =
         _elapsedFocusSeconds(timerState.remainingSeconds);
     if (elapsedFocusSeconds > 0) _recordFocusSeconds(elapsedFocusSeconds);
-    _sessionRuntime.sync(timerState);
     if (_appMode == AppTimerMode.pomodoroMode) {
+      _syncPomodoroRuntime(timerState);
       if (status != _prevStatus) {
         final previousStatus = _prevStatus;
         _handleTransition(previousStatus, status);
@@ -164,9 +166,44 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   void _onFreeTimerChanged() {
     final state = _freeTimerController.state;
     if (_appMode == AppTimerMode.timerMode) {
+      final elapsedTimerSeconds =
+          _elapsedFreeTimerSeconds(state.remainingSeconds);
+      if (elapsedTimerSeconds > 0) _recordFocusSeconds(elapsedTimerSeconds);
+      _syncFreeTimerRuntime(state);
       _handleFreeTimerTransition(state.status);
+      _lastFreeTimerRemainingSeconds = state.isRunning ? state.remainingSeconds : null;
+    } else {
+      _lastFreeTimerRemainingSeconds = null;
     }
     setState(() {});
+  }
+
+  void _syncPomodoroRuntime(TimerState state) {
+    final isRest = state.isOnBreak;
+    _sessionRuntime.sync(
+      isPlaying: state.isActivelyPlaying,
+      isComplete: state.isAwaitingAcknowledgement || state.isSetComplete,
+      modeLabel: isRest ? 'Rest' : 'Focus',
+      timeLabel: TimerFormatter.format(state.remainingSeconds),
+      completeMessage: _pomodoroCompleteMessage(state),
+    );
+  }
+
+  void _syncFreeTimerRuntime(FreeTimerState state) {
+    _sessionRuntime.sync(
+      isPlaying: state.isRunning,
+      isComplete: state.isFinished,
+      modeLabel: 'Timer',
+      timeLabel: TimerFormatter.formatLong(state.remainingSeconds),
+      completeMessage: TimerNotificationConfig.timerCompletePhrase,
+    );
+  }
+
+  String _pomodoroCompleteMessage(TimerState state) {
+    if (state.isAwaitingFocusAcknowledgement) {
+      return TimerNotificationConfig.restCompletePhrase;
+    }
+    return TimerNotificationConfig.focusCompletePhrase;
   }
 
   int _elapsedFocusSeconds(int remainingSeconds) {
@@ -175,6 +212,14 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
       return 0;
     }
     return (_lastFocusRemainingSeconds! - remainingSeconds).clamp(0, 3600);
+  }
+
+  int _elapsedFreeTimerSeconds(int remainingSeconds) {
+    if (!_freeTimerController.state.isRunning ||
+        _lastFreeTimerRemainingSeconds == null) {
+      return 0;
+    }
+    return (_lastFreeTimerRemainingSeconds! - remainingSeconds).clamp(0, 3600);
   }
 
   void _recordFocusSeconds(int seconds) {
@@ -529,6 +574,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     _celebrationCtrl.stop();
     _celebrationCtrl.reset();
     _lastFocusRemainingSeconds = null;
+    _lastFreeTimerRemainingSeconds = null;
   }
 
   Future<void> _showStatistics() async {
@@ -540,7 +586,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         accentColor: _cyan,
         children: [
           _RetroStatRow(
-            label: 'TOTAL FOCUS',
+            label: 'TOTAL FLIGHT',
             value: _formatDuration(_statistics.totalFocusSeconds),
             accentColor: _cyan,
           ),
@@ -556,6 +602,14 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
             value:
                 _formatDuration(_statistics.todayFocusSeconds(DateTime.now())),
             accentColor: _cyan,
+          ),
+          const SizedBox(height: 18),
+          _RetroFlightHeatmap(
+            statistics: _statistics,
+            now: DateTime.now(),
+            accentColor: _cyan,
+            emptyColor: _muted,
+            textColor: _textLight,
           ),
           const SizedBox(height: 24),
           _RetroDialogButton(
@@ -1277,33 +1331,43 @@ class _RetroInfoDialog extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: accentColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 4,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 4,
+                        ),
+                      ),
                     ),
-                  ),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: accentColor,
+                        size: 22,
+                      ),
+                    ),
+                  ],
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child:
-                      Icon(Icons.close_rounded, color: accentColor, size: 22),
-                ),
+                const SizedBox(height: 22),
+                ...children,
               ],
             ),
-            const SizedBox(height: 22),
-            ...children,
-          ],
+          ),
         ),
       ),
     );
@@ -1355,6 +1419,265 @@ class _RetroStatRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _RetroFlightHeatmap extends StatelessWidget {
+  const _RetroFlightHeatmap({
+    required this.statistics,
+    required this.now,
+    required this.accentColor,
+    required this.emptyColor,
+    required this.textColor,
+  });
+
+  static const int _weekCount = 6;
+  static const int _daysPerWeek = 7;
+
+  final TimerStatistics statistics;
+  final DateTime now;
+  final Color accentColor;
+  final Color emptyColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = _heatmapDays(now);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF081329),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accentColor.withValues(alpha: 0.26)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'LAST 6 WEEKS',
+                  style: TextStyle(
+                    color: textColor.withValues(alpha: 0.78),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.2,
+                  ),
+                ),
+              ),
+              Text(
+                'FLIGHT TIME',
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Column(
+                  children: const [
+                    _HeatmapWeekdayLabel('M'),
+                    _HeatmapWeekdayLabel('T'),
+                    _HeatmapWeekdayLabel('W'),
+                    _HeatmapWeekdayLabel('T'),
+                    _HeatmapWeekdayLabel('F'),
+                    _HeatmapWeekdayLabel('S'),
+                    _HeatmapWeekdayLabel('S'),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  children: [
+                    for (var week = 0; week < _weekCount; week++) ...[
+                      if (week > 0) const SizedBox(width: 5),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            for (var weekday = 0;
+                                weekday < _daysPerWeek;
+                                weekday++)
+                              Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: weekday == _daysPerWeek - 1 ? 0 : 5,
+                                ),
+                                child: _HeatmapDayCell(
+                                  day: days[week * _daysPerWeek + weekday],
+                                  seconds: _secondsForDay(
+                                    days[week * _daysPerWeek + weekday],
+                                  ),
+                                  accentColor: accentColor,
+                                  emptyColor: emptyColor,
+                                  textColor: textColor,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _secondsForDay(DateTime day) {
+    return statistics.focusSecondsByDay[_dayKey(day)] ?? 0;
+  }
+
+  static List<DateTime> _heatmapDays(DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final endOfWeek = today.add(Duration(days: DateTime.sunday - today.weekday));
+    final firstDay = endOfWeek.subtract(
+      const Duration(days: _weekCount * _daysPerWeek - 1),
+    );
+    return List<DateTime>.generate(
+      _weekCount * _daysPerWeek,
+      (index) => firstDay.add(Duration(days: index)),
+    );
+  }
+
+  static String _dayKey(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final year = local.year.toString().padLeft(4, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+}
+
+class _HeatmapWeekdayLabel extends StatelessWidget {
+  const _HeatmapWeekdayLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 24,
+      child: Center(
+        child: Text(
+          label,
+          style: TextStyle(
+            color: _SpaceshipTimerScreenState._muted.withValues(alpha: 0.86),
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeatmapDayCell extends StatelessWidget {
+  const _HeatmapDayCell({
+    required this.day,
+    required this.seconds,
+    required this.accentColor,
+    required this.emptyColor,
+    required this.textColor,
+  });
+
+  final DateTime day;
+  final int seconds;
+  final Color accentColor;
+  final Color emptyColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = seconds > 0;
+    final color = _cellColor();
+    final label = active ? _formatCellDuration(seconds) : '';
+
+    return Semantics(
+      label: '${day.day}.${day.month}: ${active ? _formatSemanticDuration(seconds) : 'no flight time'}',
+      child: Container(
+        height: 24,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: active
+                ? accentColor.withValues(alpha: 0.42)
+                : emptyColor.withValues(alpha: 0.16),
+            width: 1,
+          ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.22),
+                    blurRadius: 8,
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+          style: TextStyle(
+            color: active ? const Color(0xFF06101F) : textColor,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w900,
+            height: 1,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _cellColor() {
+    if (seconds <= 0) {
+      return emptyColor.withValues(alpha: 0.10);
+    }
+
+    final alpha = switch (seconds) {
+      < 15 * 60 => 0.36,
+      < 30 * 60 => 0.52,
+      < 60 * 60 => 0.70,
+      < 120 * 60 => 0.86,
+      _ => 1.0,
+    };
+    return Color.lerp(accentColor, const Color(0xFF5CF0C8), alpha)!
+        .withValues(alpha: 0.95);
+  }
+
+  static String _formatCellDuration(int totalSeconds) {
+    final totalMinutes = (totalSeconds / 60).round();
+    if (totalMinutes <= 0) return '<1m';
+
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours <= 0) return '${totalMinutes}m';
+    if (minutes == 0) return '${hours}h';
+    return '${hours}h$minutes';
+  }
+
+  static String _formatSemanticDuration(int totalSeconds) {
+    final totalMinutes = (totalSeconds / 60).round();
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours <= 0) return '$totalMinutes minutes';
+    if (minutes == 0) return '$hours hours';
+    return '$hours hours $minutes minutes';
   }
 }
 
