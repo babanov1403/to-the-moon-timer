@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
@@ -44,6 +46,9 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   late final AnimationController _transitionCtrl;
   late final AnimationController _flightCtrl;
   late final AnimationController _celebrationCtrl;
+
+  Timer? _transitionAlarmTicker;
+  bool _transitionAlarmActive = false;
 
   AppTimerMode _appMode = AppTimerMode.pomodoroMode;
   SpaceSceneState _scene = SpaceSceneState.landed;
@@ -111,6 +116,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   void dispose() {
     _controller.removeListener(_onTimerChanged);
     _freeTimerController.removeListener(_onFreeTimerChanged);
+    _stopTransitionAlarm();
     _sessionRuntime.stop();
     _controller.dispose();
     _freeTimerController.dispose();
@@ -135,10 +141,14 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         _elapsedFocusSeconds(timerState.remainingSeconds);
     if (elapsedFocusSeconds > 0) _recordFocusSeconds(elapsedFocusSeconds);
     _sessionRuntime.sync(timerState);
-    if (_appMode == AppTimerMode.pomodoroMode && status != _prevStatus) {
-      final previousStatus = _prevStatus;
-      _handleTransition(previousStatus, status);
-      _vibrateOnSessionToggle(status);
+    if (_appMode == AppTimerMode.pomodoroMode) {
+      if (status != _prevStatus) {
+        final previousStatus = _prevStatus;
+        _handleTransition(previousStatus, status);
+      }
+      _syncTransitionAlarm(timerState);
+    } else {
+      _stopTransitionAlarm();
     }
     if (timerState.completedSetCount > _lastCompletedSetCount) {
       _lastCompletedSetCount = timerState.completedSetCount;
@@ -175,10 +185,37 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     }).catchError((Object _) {});
   }
 
-  void _vibrateOnSessionToggle(TimerStatus next) {
-    if (next == TimerStatus.finished || next == TimerStatus.breakFinished) {
-      _playSessionEndVibration();
+  void _syncTransitionAlarm(TimerState state) {
+    if (state.isAwaitingAcknowledgement) {
+      _startTransitionAlarm();
+    } else {
+      _stopTransitionAlarm();
     }
+  }
+
+  void _startTransitionAlarm() {
+    if (_transitionAlarmActive) return;
+    _transitionAlarmActive = true;
+    _playTransitionAlarmPulse();
+    _transitionAlarmTicker = Timer.periodic(
+      const Duration(milliseconds: 1200),
+      (_) => _playTransitionAlarmPulse(),
+    );
+  }
+
+  void _stopTransitionAlarm() {
+    _transitionAlarmTicker?.cancel();
+    _transitionAlarmTicker = null;
+    if (!_transitionAlarmActive) return;
+    _transitionAlarmActive = false;
+    Vibration.cancel().catchError((Object _) {});
+  }
+
+  Future<void> _playTransitionAlarmPulse() async {
+    await _playContinuousVibration(
+      durationMs: 850,
+      fallback: _playTransitionAlarmHapticFallback,
+    );
   }
 
   Future<void> _playSessionEndVibration() async {
@@ -210,6 +247,22 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     } catch (_) {
       fallback();
     }
+  }
+
+  void _playTransitionAlarmHapticFallback() {
+    HapticFeedback.heavyImpact();
+    Future<void>.delayed(
+      const Duration(milliseconds: 220),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 440),
+      HapticFeedback.mediumImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 660),
+      HapticFeedback.heavyImpact,
+    );
   }
 
   void _playSessionEndHapticFallback() {
@@ -261,7 +314,8 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
       _flightCtrl.stop();
       _exhaustCtrl.stop();
       _scene = SpaceSceneState.pausedInSpace;
-    } else if ((next == TimerStatus.finished ||
+    } else if ((next == TimerStatus.awaitingBreakAcknowledgement ||
+            next == TimerStatus.finished ||
             next == TimerStatus.setComplete) &&
         (flying || takingOff)) {
       _finishFlightAndLand();
@@ -320,9 +374,11 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
 
   bool _isLanded(TimerStatus s) =>
       s == TimerStatus.idle ||
+      s == TimerStatus.awaitingBreakAcknowledgement ||
       s == TimerStatus.breakRunning ||
       s == TimerStatus.breakPaused ||
       s == TimerStatus.breakFinished ||
+      s == TimerStatus.awaitingFocusAcknowledgement ||
       s == TimerStatus.setComplete;
 
   void _onTransitionDone(AnimationStatus s) {
@@ -441,6 +497,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
 
   void _switchMode() {
     HapticFeedback.mediumImpact();
+    _stopTransitionAlarm();
     if (_appMode == AppTimerMode.pomodoroMode) {
       _controller.restartSet();
       _sessionRuntime.stop();
@@ -460,6 +517,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   }
 
   void _resetVisuals({required bool clearPomodoroProgress}) {
+    _stopTransitionAlarm();
     _scene = SpaceSceneState.landed;
     _prevStatus = null;
     _lastCompletedSetCount = _controller.state.completedSetCount;
@@ -655,14 +713,17 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
                     Expanded(
                       flex: 4,
                       child: Center(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 320),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          transitionBuilder: _modeTransition,
-                          child: _isTimerMode
-                              ? _buildTimerControls(freeState)
-                              : _buildPomodoroControls(s, accent),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 320),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: _modeTransition,
+                            child: _isTimerMode
+                                ? _buildTimerControls(freeState)
+                                : _buildPomodoroControls(s, accent),
+                          ),
                         ),
                       ),
                     ),
@@ -762,41 +823,53 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
       key: const ValueKey(AppTimerMode.pomodoroMode),
       mainAxisSize: MainAxisSize.min,
       children: [
-        RetroTimerField(
-          timeLabel: TimerFormatter.format(s.remainingSeconds),
-          isRunning: isActive,
-          accentColor: accent,
-          onTap: _openPicker,
-        ),
+        if (s.isAwaitingAcknowledgement)
+          _TransitionAlarmPanel(
+            title: _transitionAlarmTitle(s),
+            message: _transitionAlarmMessage(s),
+            accentColor: accent,
+            onAcknowledge: _acknowledgeTransitionAlarm,
+          )
+        else
+          RetroTimerField(
+            timeLabel: TimerFormatter.format(s.remainingSeconds),
+            isRunning: isActive,
+            accentColor: accent,
+            onTap: _openPicker,
+          ),
         const SizedBox(height: 18),
-        Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
-          children: [
-            RetroPomodoroSetProgress(
-              completedPlanetColors: _completedPlanetColors,
-              completedSessions: s.completedFocusSessions,
-              totalSessions: kPomodoroSessionsPerSet,
-              emptyColor: _muted,
-            ),
-            Positioned(
-              top: -54,
-              right: -62,
-              child: AnimatedBuilder(
-                animation: _celebrationCtrl,
-                builder: (context, _) {
-                  if (_celebrationCtrl.value == 0) {
-                    return const SizedBox.shrink();
-                  }
-                  return RetroFireworks(
-                    progress: _celebrationCtrl.value,
-                    primaryColor: _planet.colorA,
-                    secondaryColor: _yellow,
-                  );
-                },
-              ),
-            ),
-          ],
+        _buildPomodoroProgress(s),
+      ],
+    );
+  }
+
+  Widget _buildPomodoroProgress(TimerState s) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        RetroPomodoroSetProgress(
+          completedPlanetColors: _completedPlanetColors,
+          completedSessions: s.completedFocusSessions,
+          totalSessions: kPomodoroSessionsPerSet,
+          emptyColor: _muted,
+        ),
+        Positioned(
+          top: -54,
+          right: -62,
+          child: AnimatedBuilder(
+            animation: _celebrationCtrl,
+            builder: (context, _) {
+              if (_celebrationCtrl.value == 0) {
+                return const SizedBox.shrink();
+              }
+              return RetroFireworks(
+                progress: _celebrationCtrl.value,
+                primaryColor: _planet.colorA,
+                secondaryColor: _yellow,
+              );
+            },
+          ),
         ),
       ],
     );
@@ -865,6 +938,10 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   }
 
   Widget _buildPomodoroPlayButton(TimerState s, Color accent) {
+    if (s.isAwaitingAcknowledgement) {
+      return const SizedBox.shrink();
+    }
+
     final isActive = s.isRunning || s.isBreakRunning;
     return RetroPlayButton(
       label: _playButtonLabel(s),
@@ -882,6 +959,12 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         }
       },
     );
+  }
+
+  void _acknowledgeTransitionAlarm() {
+    HapticFeedback.mediumImpact();
+    _stopTransitionAlarm();
+    _controller.acknowledgeTransitionAlarm();
   }
 
   Widget _buildTimerPlayButton(FreeTimerState state) {
@@ -907,6 +990,18 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     return 'Start Timer';
   }
 
+  String _transitionAlarmTitle(TimerState s) {
+    if (s.isAwaitingBreakAcknowledgement) return 'Focus complete';
+    return 'Rest complete';
+  }
+
+  String _transitionAlarmMessage(TimerState s) {
+    if (s.isAwaitingBreakAcknowledgement) {
+      return 'Confirm you are here to start rest.';
+    }
+    return 'Confirm you are here to start focus.';
+  }
+
   String _playButtonLabel(TimerState s) {
     if (s.isSetComplete) return 'Restart Orbit';
     if (_isActiveBreakState(s)) {
@@ -918,6 +1013,113 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   bool _isActiveBreakState(TimerState s) => s.isOnBreak;
 
   bool _isActiveRunningState(TimerState s) => s.isRunning || s.isBreakRunning;
+}
+
+class _TransitionAlarmPanel extends StatelessWidget {
+  const _TransitionAlarmPanel({
+    required this.title,
+    required this.message,
+    required this.accentColor,
+    required this.onAcknowledge,
+  });
+
+  final String title;
+  final String message;
+  final Color accentColor;
+  final VoidCallback onAcknowledge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: '$title. $message',
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 300),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        decoration: BoxDecoration(
+          color: _SpaceshipTimerScreenState._panel.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.52),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withValues(alpha: 0.18),
+              blurRadius: 24,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.notifications_active_rounded,
+              color: accentColor,
+              size: 24,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: accentColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _SpaceshipTimerScreenState._textLight.withValues(
+                  alpha: 0.70,
+                ),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              button: true,
+              label: 'I am here',
+              child: GestureDetector(
+                onTap: onAcknowledge,
+                child: Container(
+                  height: 46,
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.62),
+                      width: 1.3,
+                    ),
+                  ),
+                  child: Text(
+                    'I AM HERE',
+                    style: TextStyle(
+                      color: accentColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AtmosphereOrb extends StatelessWidget {

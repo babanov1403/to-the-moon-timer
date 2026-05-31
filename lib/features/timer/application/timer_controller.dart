@@ -40,9 +40,31 @@ class TimerController extends ChangeNotifier {
         if (_state.remainingSeconds > 0) _startBreak();
       case TimerStatus.setComplete:
         restartSet();
+      case TimerStatus.awaitingBreakAcknowledgement:
+      case TimerStatus.awaitingFocusAcknowledgement:
+        acknowledgeTransitionAlarm();
       case TimerStatus.finished:
       case TimerStatus.breakFinished:
-        // Transitional states auto-advance; there is no manual action here.
+        // Legacy transitional states are not expected in the current flow.
+        break;
+    }
+  }
+
+  /// Acknowledges a completed focus/rest transition alarm and starts next phase.
+  void acknowledgeTransitionAlarm() {
+    switch (_state.status) {
+      case TimerStatus.awaitingBreakAcknowledgement:
+        _beginBreak();
+      case TimerStatus.awaitingFocusAcknowledgement:
+        _beginNextFocus();
+      case TimerStatus.idle:
+      case TimerStatus.running:
+      case TimerStatus.paused:
+      case TimerStatus.finished:
+      case TimerStatus.breakRunning:
+      case TimerStatus.breakPaused:
+      case TimerStatus.breakFinished:
+      case TimerStatus.setComplete:
         break;
     }
   }
@@ -174,15 +196,15 @@ class TimerController extends ChangeNotifier {
 
       _state = _state.copyWith(
         remainingSeconds: 0,
-        status: completedSet ? TimerStatus.setComplete : TimerStatus.finished,
+        status: completedSet
+            ? TimerStatus.setComplete
+            : TimerStatus.awaitingBreakAcknowledgement,
         completedFocusSessions: nextCompletedSessions,
         completedSetCount: completedSet
             ? _state.completedSetCount + 1
             : _state.completedSetCount,
       );
       notifyListeners();
-
-      if (!completedSet) _beginBreak();
     } else {
       _state = _state.copyWith(remainingSeconds: next);
       notifyListeners();
@@ -195,10 +217,9 @@ class TimerController extends ChangeNotifier {
       _cancelTicker();
       _state = _state.copyWith(
         remainingSeconds: 0,
-        status: TimerStatus.breakFinished,
+        status: TimerStatus.awaitingFocusAcknowledgement,
       );
       notifyListeners();
-      _beginNextFocus();
     } else {
       _state = _state.copyWith(remainingSeconds: next);
       notifyListeners();
