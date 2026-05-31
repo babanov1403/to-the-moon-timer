@@ -34,13 +34,24 @@ class TimerState {
   final int completedSetCount;
 
   bool get isRunning => status == TimerStatus.running;
-  bool get isFinished => status == TimerStatus.finished;
+  bool get isFinished =>
+      status == TimerStatus.finished ||
+      status == TimerStatus.awaitingBreakAcknowledgement;
+  bool get isAwaitingBreakAcknowledgement =>
+      status == TimerStatus.awaitingBreakAcknowledgement;
   bool get isOnBreak =>
       status == TimerStatus.breakRunning ||
       status == TimerStatus.breakPaused ||
-      status == TimerStatus.breakFinished;
+      status == TimerStatus.breakFinished ||
+      status == TimerStatus.awaitingFocusAcknowledgement;
   bool get isBreakRunning => status == TimerStatus.breakRunning;
-  bool get isBreakFinished => status == TimerStatus.breakFinished;
+  bool get isBreakFinished =>
+      status == TimerStatus.breakFinished ||
+      status == TimerStatus.awaitingFocusAcknowledgement;
+  bool get isAwaitingFocusAcknowledgement =>
+      status == TimerStatus.awaitingFocusAcknowledgement;
+  bool get isAwaitingAcknowledgement =>
+      isAwaitingBreakAcknowledgement || isAwaitingFocusAcknowledgement;
   bool get isSetComplete => status == TimerStatus.setComplete;
   bool get isActivelyPlaying => isRunning || isBreakRunning;
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
@@ -6,6 +8,7 @@ import '../application/free_timer_controller.dart';
 import '../application/timer_config.dart';
 import '../application/timer_controller.dart';
 import '../application/timer_formatter.dart';
+import '../application/timer_notification_config.dart';
 import '../application/timer_session_runtime.dart';
 import '../application/timer_statistics_store.dart';
 import '../domain/free_timer_state.dart';
@@ -45,12 +48,16 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   late final AnimationController _flightCtrl;
   late final AnimationController _celebrationCtrl;
 
+  Timer? _transitionAlarmTicker;
+  bool _transitionAlarmActive = false;
+
   AppTimerMode _appMode = AppTimerMode.pomodoroMode;
   SpaceSceneState _scene = SpaceSceneState.landed;
   TimerStatus? _prevStatus;
   TimerStatistics _statistics = TimerStatistics.empty();
   Future<void> _statisticsUpdate = Future<void>.value();
   int? _lastFocusRemainingSeconds;
+  int? _lastFreeTimerRemainingSeconds;
   PlanetData _planet = PlanetData.generate(42);
   int _planetSeed = 42;
   int _lastCompletedSetCount = 0;
@@ -111,6 +118,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   void dispose() {
     _controller.removeListener(_onTimerChanged);
     _freeTimerController.removeListener(_onFreeTimerChanged);
+    _stopTransitionAlarm();
     _sessionRuntime.stop();
     _controller.dispose();
     _freeTimerController.dispose();
@@ -134,11 +142,15 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     final elapsedFocusSeconds =
         _elapsedFocusSeconds(timerState.remainingSeconds);
     if (elapsedFocusSeconds > 0) _recordFocusSeconds(elapsedFocusSeconds);
-    _sessionRuntime.sync(timerState);
-    if (_appMode == AppTimerMode.pomodoroMode && status != _prevStatus) {
-      final previousStatus = _prevStatus;
-      _handleTransition(previousStatus, status);
-      _vibrateOnSessionToggle(status);
+    if (_appMode == AppTimerMode.pomodoroMode) {
+      _syncPomodoroRuntime(timerState);
+      if (status != _prevStatus) {
+        final previousStatus = _prevStatus;
+        _handleTransition(previousStatus, status);
+      }
+      _syncTransitionAlarm(timerState);
+    } else {
+      _stopTransitionAlarm();
     }
     if (timerState.completedSetCount > _lastCompletedSetCount) {
       _lastCompletedSetCount = timerState.completedSetCount;
@@ -154,9 +166,45 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   void _onFreeTimerChanged() {
     final state = _freeTimerController.state;
     if (_appMode == AppTimerMode.timerMode) {
+      final elapsedTimerSeconds =
+          _elapsedFreeTimerSeconds(state.remainingSeconds);
+      if (elapsedTimerSeconds > 0) _recordFocusSeconds(elapsedTimerSeconds);
+      _syncFreeTimerRuntime(state);
       _handleFreeTimerTransition(state.status);
+      _lastFreeTimerRemainingSeconds =
+          state.isRunning ? state.remainingSeconds : null;
+    } else {
+      _lastFreeTimerRemainingSeconds = null;
     }
     setState(() {});
+  }
+
+  void _syncPomodoroRuntime(TimerState state) {
+    final isRest = state.isOnBreak;
+    _sessionRuntime.sync(
+      isPlaying: state.isActivelyPlaying,
+      isComplete: state.isAwaitingAcknowledgement || state.isSetComplete,
+      modeLabel: isRest ? 'Rest' : 'Focus',
+      timeLabel: TimerFormatter.format(state.remainingSeconds),
+      completeMessage: _pomodoroCompleteMessage(state),
+    );
+  }
+
+  void _syncFreeTimerRuntime(FreeTimerState state) {
+    _sessionRuntime.sync(
+      isPlaying: state.isRunning,
+      isComplete: state.isFinished,
+      modeLabel: 'Timer',
+      timeLabel: TimerFormatter.formatLong(state.remainingSeconds),
+      completeMessage: TimerNotificationConfig.timerCompletePhrase,
+    );
+  }
+
+  String _pomodoroCompleteMessage(TimerState state) {
+    if (state.isAwaitingFocusAcknowledgement) {
+      return TimerNotificationConfig.restCompletePhrase;
+    }
+    return TimerNotificationConfig.focusCompletePhrase;
   }
 
   int _elapsedFocusSeconds(int remainingSeconds) {
@@ -167,6 +215,14 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     return (_lastFocusRemainingSeconds! - remainingSeconds).clamp(0, 3600);
   }
 
+  int _elapsedFreeTimerSeconds(int remainingSeconds) {
+    if (!_freeTimerController.state.isRunning ||
+        _lastFreeTimerRemainingSeconds == null) {
+      return 0;
+    }
+    return (_lastFreeTimerRemainingSeconds! - remainingSeconds).clamp(0, 3600);
+  }
+
   void _recordFocusSeconds(int seconds) {
     _statisticsUpdate = _statisticsUpdate
         .then((_) => _statisticsStore.addFocusSeconds(seconds))
@@ -175,10 +231,37 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     }).catchError((Object _) {});
   }
 
-  void _vibrateOnSessionToggle(TimerStatus next) {
-    if (next == TimerStatus.finished || next == TimerStatus.breakFinished) {
-      _playSessionEndVibration();
+  void _syncTransitionAlarm(TimerState state) {
+    if (state.isAwaitingAcknowledgement) {
+      _startTransitionAlarm();
+    } else {
+      _stopTransitionAlarm();
     }
+  }
+
+  void _startTransitionAlarm() {
+    if (_transitionAlarmActive) return;
+    _transitionAlarmActive = true;
+    _playTransitionAlarmPulse();
+    _transitionAlarmTicker = Timer.periodic(
+      const Duration(milliseconds: 1200),
+      (_) => _playTransitionAlarmPulse(),
+    );
+  }
+
+  void _stopTransitionAlarm() {
+    _transitionAlarmTicker?.cancel();
+    _transitionAlarmTicker = null;
+    if (!_transitionAlarmActive) return;
+    _transitionAlarmActive = false;
+    Vibration.cancel().catchError((Object _) {});
+  }
+
+  Future<void> _playTransitionAlarmPulse() async {
+    await _playContinuousVibration(
+      durationMs: 850,
+      fallback: _playTransitionAlarmHapticFallback,
+    );
   }
 
   Future<void> _playSessionEndVibration() async {
@@ -212,6 +295,22 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     }
   }
 
+  void _playTransitionAlarmHapticFallback() {
+    HapticFeedback.heavyImpact();
+    Future<void>.delayed(
+      const Duration(milliseconds: 220),
+      HapticFeedback.heavyImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 440),
+      HapticFeedback.mediumImpact,
+    );
+    Future<void>.delayed(
+      const Duration(milliseconds: 660),
+      HapticFeedback.heavyImpact,
+    );
+  }
+
   void _playSessionEndHapticFallback() {
     HapticFeedback.heavyImpact();
     Future<void>.delayed(
@@ -240,6 +339,51 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     );
   }
 
+  Future<bool> _confirmResetStatistics(BuildContext context) async {
+    HapticFeedback.lightImpact();
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => _RetroInfoDialog(
+            title: 'RESET STATS?',
+            accentColor: _yellow,
+            children: [
+              Text(
+                'This will permanently clear total flight time and every daily heatmap cell.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _textLight.withValues(alpha: 0.72),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _RetroDialogButton(
+                      label: 'CANCEL',
+                      color: _cyan,
+                      onTap: () => Navigator.of(context).pop(false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _RetroDialogButton(
+                      label: 'RESET',
+                      color: _yellow,
+                      onTap: () => Navigator.of(context).pop(true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> _resetStatistics() async {
     HapticFeedback.mediumImpact();
     final statistics = await _statisticsStore.reset();
@@ -261,7 +405,8 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
       _flightCtrl.stop();
       _exhaustCtrl.stop();
       _scene = SpaceSceneState.pausedInSpace;
-    } else if ((next == TimerStatus.finished ||
+    } else if ((next == TimerStatus.awaitingBreakAcknowledgement ||
+            next == TimerStatus.finished ||
             next == TimerStatus.setComplete) &&
         (flying || takingOff)) {
       _finishFlightAndLand();
@@ -320,9 +465,11 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
 
   bool _isLanded(TimerStatus s) =>
       s == TimerStatus.idle ||
+      s == TimerStatus.awaitingBreakAcknowledgement ||
       s == TimerStatus.breakRunning ||
       s == TimerStatus.breakPaused ||
       s == TimerStatus.breakFinished ||
+      s == TimerStatus.awaitingFocusAcknowledgement ||
       s == TimerStatus.setComplete;
 
   void _onTransitionDone(AnimationStatus s) {
@@ -441,6 +588,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
 
   void _switchMode() {
     HapticFeedback.mediumImpact();
+    _stopTransitionAlarm();
     if (_appMode == AppTimerMode.pomodoroMode) {
       _controller.restartSet();
       _sessionRuntime.stop();
@@ -460,6 +608,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   }
 
   void _resetVisuals({required bool clearPomodoroProgress}) {
+    _stopTransitionAlarm();
     _scene = SpaceSceneState.landed;
     _prevStatus = null;
     _lastCompletedSetCount = _controller.state.completedSetCount;
@@ -471,6 +620,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     _celebrationCtrl.stop();
     _celebrationCtrl.reset();
     _lastFocusRemainingSeconds = null;
+    _lastFreeTimerRemainingSeconds = null;
   }
 
   Future<void> _showStatistics() async {
@@ -482,7 +632,7 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         accentColor: _cyan,
         children: [
           _RetroStatRow(
-            label: 'TOTAL FOCUS',
+            label: 'TOTAL FLIGHT',
             value: _formatDuration(_statistics.totalFocusSeconds),
             accentColor: _cyan,
           ),
@@ -499,11 +649,21 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
                 _formatDuration(_statistics.todayFocusSeconds(DateTime.now())),
             accentColor: _cyan,
           ),
+          const SizedBox(height: 18),
+          _RetroFlightHeatmap(
+            statistics: _statistics,
+            now: DateTime.now(),
+            accentColor: _cyan,
+            emptyColor: _muted,
+            textColor: _textLight,
+          ),
           const SizedBox(height: 24),
           _RetroDialogButton(
             label: 'RESET STATS',
             color: _yellow,
             onTap: () async {
+              final confirmed = await _confirmResetStatistics(context);
+              if (!confirmed) return;
               await _resetStatistics();
               if (context.mounted) Navigator.of(context).pop();
             },
@@ -655,14 +815,17 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
                     Expanded(
                       flex: 4,
                       child: Center(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 320),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          transitionBuilder: _modeTransition,
-                          child: _isTimerMode
-                              ? _buildTimerControls(freeState)
-                              : _buildPomodoroControls(s, accent),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 320),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: _modeTransition,
+                            child: _isTimerMode
+                                ? _buildTimerControls(freeState)
+                                : _buildPomodoroControls(s, accent),
+                          ),
                         ),
                       ),
                     ),
@@ -762,41 +925,53 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
       key: const ValueKey(AppTimerMode.pomodoroMode),
       mainAxisSize: MainAxisSize.min,
       children: [
-        RetroTimerField(
-          timeLabel: TimerFormatter.format(s.remainingSeconds),
-          isRunning: isActive,
-          accentColor: accent,
-          onTap: _openPicker,
-        ),
+        if (s.isAwaitingAcknowledgement)
+          _TransitionAlarmPanel(
+            title: _transitionAlarmTitle(s),
+            message: _transitionAlarmMessage(s),
+            accentColor: accent,
+            onAcknowledge: _acknowledgeTransitionAlarm,
+          )
+        else
+          RetroTimerField(
+            timeLabel: TimerFormatter.format(s.remainingSeconds),
+            isRunning: isActive,
+            accentColor: accent,
+            onTap: _openPicker,
+          ),
         const SizedBox(height: 18),
-        Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
-          children: [
-            RetroPomodoroSetProgress(
-              completedPlanetColors: _completedPlanetColors,
-              completedSessions: s.completedFocusSessions,
-              totalSessions: kPomodoroSessionsPerSet,
-              emptyColor: _muted,
-            ),
-            Positioned(
-              top: -54,
-              right: -62,
-              child: AnimatedBuilder(
-                animation: _celebrationCtrl,
-                builder: (context, _) {
-                  if (_celebrationCtrl.value == 0) {
-                    return const SizedBox.shrink();
-                  }
-                  return RetroFireworks(
-                    progress: _celebrationCtrl.value,
-                    primaryColor: _planet.colorA,
-                    secondaryColor: _yellow,
-                  );
-                },
-              ),
-            ),
-          ],
+        _buildPomodoroProgress(s),
+      ],
+    );
+  }
+
+  Widget _buildPomodoroProgress(TimerState s) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        RetroPomodoroSetProgress(
+          completedPlanetColors: _completedPlanetColors,
+          completedSessions: s.completedFocusSessions,
+          totalSessions: kPomodoroSessionsPerSet,
+          emptyColor: _muted,
+        ),
+        Positioned(
+          top: -54,
+          right: -62,
+          child: AnimatedBuilder(
+            animation: _celebrationCtrl,
+            builder: (context, _) {
+              if (_celebrationCtrl.value == 0) {
+                return const SizedBox.shrink();
+              }
+              return RetroFireworks(
+                progress: _celebrationCtrl.value,
+                primaryColor: _planet.colorA,
+                secondaryColor: _yellow,
+              );
+            },
+          ),
         ),
       ],
     );
@@ -865,6 +1040,10 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   }
 
   Widget _buildPomodoroPlayButton(TimerState s, Color accent) {
+    if (s.isAwaitingAcknowledgement) {
+      return const SizedBox.shrink();
+    }
+
     final isActive = s.isRunning || s.isBreakRunning;
     return RetroPlayButton(
       label: _playButtonLabel(s),
@@ -882,6 +1061,12 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
         }
       },
     );
+  }
+
+  void _acknowledgeTransitionAlarm() {
+    HapticFeedback.mediumImpact();
+    _stopTransitionAlarm();
+    _controller.acknowledgeTransitionAlarm();
   }
 
   Widget _buildTimerPlayButton(FreeTimerState state) {
@@ -907,6 +1092,18 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
     return 'Start Timer';
   }
 
+  String _transitionAlarmTitle(TimerState s) {
+    if (s.isAwaitingBreakAcknowledgement) return 'Focus complete';
+    return 'Rest complete';
+  }
+
+  String _transitionAlarmMessage(TimerState s) {
+    if (s.isAwaitingBreakAcknowledgement) {
+      return 'Confirm you are here to start rest.';
+    }
+    return 'Confirm you are here to start focus.';
+  }
+
   String _playButtonLabel(TimerState s) {
     if (s.isSetComplete) return 'Restart Orbit';
     if (_isActiveBreakState(s)) {
@@ -918,6 +1115,113 @@ class _SpaceshipTimerScreenState extends State<SpaceshipTimerScreen>
   bool _isActiveBreakState(TimerState s) => s.isOnBreak;
 
   bool _isActiveRunningState(TimerState s) => s.isRunning || s.isBreakRunning;
+}
+
+class _TransitionAlarmPanel extends StatelessWidget {
+  const _TransitionAlarmPanel({
+    required this.title,
+    required this.message,
+    required this.accentColor,
+    required this.onAcknowledge,
+  });
+
+  final String title;
+  final String message;
+  final Color accentColor;
+  final VoidCallback onAcknowledge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: '$title. $message',
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 300),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        decoration: BoxDecoration(
+          color: _SpaceshipTimerScreenState._panel.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.52),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withValues(alpha: 0.18),
+              blurRadius: 24,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.notifications_active_rounded,
+              color: accentColor,
+              size: 24,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: accentColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _SpaceshipTimerScreenState._textLight.withValues(
+                  alpha: 0.70,
+                ),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Semantics(
+              button: true,
+              label: 'I am here',
+              child: GestureDetector(
+                onTap: onAcknowledge,
+                child: Container(
+                  height: 46,
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.62),
+                      width: 1.3,
+                    ),
+                  ),
+                  child: Text(
+                    'I AM HERE',
+                    style: TextStyle(
+                      color: accentColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AtmosphereOrb extends StatelessWidget {
@@ -1075,33 +1379,43 @@ class _RetroInfoDialog extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: accentColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 4,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 4,
+                        ),
+                      ),
                     ),
-                  ),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: accentColor,
+                        size: 22,
+                      ),
+                    ),
+                  ],
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child:
-                      Icon(Icons.close_rounded, color: accentColor, size: 22),
-                ),
+                const SizedBox(height: 22),
+                ...children,
               ],
             ),
-            const SizedBox(height: 22),
-            ...children,
-          ],
+          ),
         ),
       ),
     );
@@ -1153,6 +1467,280 @@ class _RetroStatRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _RetroFlightHeatmap extends StatelessWidget {
+  const _RetroFlightHeatmap({
+    required this.statistics,
+    required this.now,
+    required this.accentColor,
+    required this.emptyColor,
+    required this.textColor,
+  });
+
+  static const int _weekCount = 6;
+  static const int _daysPerWeek = 7;
+  static const List<String> _weekdayLabels = [
+    'M',
+    'T',
+    'W',
+    'T',
+    'F',
+    'S',
+    'S'
+  ];
+
+  final TimerStatistics statistics;
+  final DateTime now;
+  final Color accentColor;
+  final Color emptyColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = _heatmapDays(now);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF081329),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accentColor.withValues(alpha: 0.26)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'LAST 6 WEEKS',
+                  style: TextStyle(
+                    color: textColor.withValues(alpha: 0.78),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.2,
+                  ),
+                ),
+              ),
+              Text(
+                'FLIGHT TIME',
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Column(
+                  children: [
+                    for (var weekday = 0;
+                        weekday < _weekdayLabels.length;
+                        weekday++)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: weekday == _weekdayLabels.length - 1 ? 0 : 5,
+                        ),
+                        child: _HeatmapWeekdayLabel(_weekdayLabels[weekday]),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  children: [
+                    for (var week = 0; week < _weekCount; week++) ...[
+                      if (week > 0) const SizedBox(width: 5),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            for (var weekday = 0;
+                                weekday < _daysPerWeek;
+                                weekday++)
+                              Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: weekday == _daysPerWeek - 1 ? 0 : 5,
+                                ),
+                                child: _HeatmapDayCell(
+                                  day: days[week * _daysPerWeek + weekday],
+                                  seconds: _secondsForDay(
+                                    days[week * _daysPerWeek + weekday],
+                                  ),
+                                  accentColor: accentColor,
+                                  emptyColor: emptyColor,
+                                  textColor: textColor,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _secondsForDay(DateTime day) {
+    return statistics.focusSecondsByDay[_dayKey(day)] ?? 0;
+  }
+
+  static List<DateTime> _heatmapDays(DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final endOfWeek =
+        today.add(Duration(days: DateTime.sunday - today.weekday));
+    final firstDay = endOfWeek.subtract(
+      const Duration(days: _weekCount * _daysPerWeek - 1),
+    );
+    return List<DateTime>.generate(
+      _weekCount * _daysPerWeek,
+      (index) => firstDay.add(Duration(days: index)),
+    );
+  }
+
+  static String _dayKey(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final year = local.year.toString().padLeft(4, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+}
+
+class _HeatmapWeekdayLabel extends StatelessWidget {
+  const _HeatmapWeekdayLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 24,
+      child: Center(
+        child: Text(
+          label,
+          style: TextStyle(
+            color: _SpaceshipTimerScreenState._muted.withValues(alpha: 0.86),
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeatmapDayCell extends StatelessWidget {
+  const _HeatmapDayCell({
+    required this.day,
+    required this.seconds,
+    required this.accentColor,
+    required this.emptyColor,
+    required this.textColor,
+  });
+
+  final DateTime day;
+  final int seconds;
+  final Color accentColor;
+  final Color emptyColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = seconds > 0;
+    final color = _cellColor();
+    final label = active ? _formatCellDuration(seconds) : '';
+
+    return Semantics(
+      label:
+          '${day.day}.${day.month}: ${active ? _formatSemanticDuration(seconds) : 'no flight time'}',
+      child: Container(
+        height: 24,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: active
+                ? accentColor.withValues(alpha: 0.42)
+                : emptyColor.withValues(alpha: 0.16),
+            width: 1,
+          ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.22),
+                    blurRadius: 8,
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+          style: TextStyle(
+            color: active ? const Color(0xFF06101F) : textColor,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w900,
+            height: 1,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _cellColor() {
+    if (seconds <= 0) {
+      return emptyColor.withValues(alpha: 0.10);
+    }
+
+    return switch (seconds) {
+      < 30 * 60 =>
+        Color.lerp(emptyColor, accentColor, 0.18)!.withValues(alpha: 0.52),
+      < 60 * 60 =>
+        Color.lerp(emptyColor, accentColor, 0.42)!.withValues(alpha: 0.70),
+      < 90 * 60 => Color.lerp(accentColor, const Color(0xFF5CF0C8), 0.35)!
+          .withValues(alpha: 0.82),
+      < 120 * 60 => Color.lerp(accentColor, const Color(0xFF5CF0C8), 0.68)!
+          .withValues(alpha: 0.90),
+      _ => const Color(0xFF5CF0C8).withValues(alpha: 0.95),
+    };
+  }
+
+  static String _formatCellDuration(int totalSeconds) {
+    final totalMinutes = (totalSeconds / 60).round();
+    if (totalMinutes <= 0) return '<1m';
+
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours <= 0) return '${totalMinutes}m';
+    if (minutes == 0) return '${hours}h';
+    return '${hours}h$minutes';
+  }
+
+  static String _formatSemanticDuration(int totalSeconds) {
+    final totalMinutes = (totalSeconds / 60).round();
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours <= 0) return '$totalMinutes minutes';
+    if (minutes == 0) return '$hours hours';
+    return '$hours hours $minutes minutes';
   }
 }
 

@@ -9,8 +9,11 @@ enum TimerStatus {
   /// Timer was started but then paused mid-session.
   paused,
 
-  /// Focus session reached zero — transitioning to break.
+  /// Focus session reached zero.
   finished,
+
+  /// Focus session reached zero and waits for user acknowledgement before break.
+  awaitingBreakAcknowledgement,
 
   /// Break countdown is actively running.
   breakRunning,
@@ -20,6 +23,9 @@ enum TimerStatus {
 
   /// Break session reached zero.
   breakFinished,
+
+  /// Break reached zero and waits for user acknowledgement before next focus.
+  awaitingFocusAcknowledgement,
 
   /// Four focus sessions were completed and the app is waiting for restart.
   setComplete,
